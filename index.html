@@ -3,41 +3,45 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Word Card Learning Tool</title>
+    <title>Word Cards</title>
     <link rel="stylesheet" href="styles.css">
 </head>
 <body>
     <div class="container">
-        <h1>Word Card Learning Tool</h1>
+        <h1>Word Cards</h1>
         
         <div class="section">
-            <h2>1. Add Your Word Cards</h2>
-            <p>Enter words in CSV format: word,pronunciation,meaning (one per line)</p>
-            <textarea id="wordInput" placeholder="Example:
-谢谢,xièxie,thank you
-再见,zàijiàn,goodbye
-你好,nǐ hǎo,hello"></textarea>
-            <div class="button-group">
-                <button id="loadCards">Load Cards</button>
-                <button id="exportCards">Export CSV</button>
-                <button id="importCards">Load from File</button>
-                <button id="clearCards">Clear All</button>
-            </div>
-            <div id="cardCount" class="stats">No cards loaded</div>
-        </div>
-        
-        <div class="section">
-            <h2>2. Select Learning Mode</h2>
+            <h2>Select Mode</h2>
             <div class="mode-selector">
                 <button class="mode-btn" data-mode="flashcard">Flashcards</button>
                 <button class="mode-btn" data-mode="multipleChoice">Multiple Choice</button>
-                <button class="mode-btn" data-mode="writePronunciation">Write Pronunciation</button>
-                <button class="mode-btn" data-mode="writeSpelling">Write Spelling</button>
+                <button class="mode-btn" data-mode="pronunciation">Pronunciation</button>
+                <button class="mode-btn" data-mode="writing">Writing</button>
+                <button class="mode-btn" data-mode="editor">Editor</button>
             </div>
         </div>
         
         <div class="section">
-            <div id="flashcardMode" class="mode-content">
+            <!-- Editor Mode -->
+            <div id="editorMode" class="mode-content">
+                <h2>Card Editor</h2>
+                <p>Enter cards in CSV format: word,pronunciation,meaning (one per line)</p>
+                <textarea id="wordInput" placeholder="Example:
+谢谢,xièxie,thank you
+再见,zàijiàn,goodbye
+你好,nǐhǎo,hello"></textarea>
+                <div class="button-group">
+                    <button id="updateCards">Update</button>
+                    <button id="exportCards">Export</button>
+                    <button id="importCards">Import</button>
+                    <button id="clearCards">Clear</button>
+                </div>
+                <div id="cardCount" class="stats">No cards loaded</div>
+                <div id="editorWarning" class="warning hidden"></div>
+            </div>
+            
+            <!-- Flashcard Mode -->
+            <div id="flashcardMode" class="mode-content hidden">
                 <h2>Flashcard Mode</h2>
                 <div class="card-container">
                     <div class="card" id="flashcard">
@@ -50,16 +54,25 @@
                         </div>
                     </div>
                 </div>
+                <div class="flashcard-controls">
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="randomizeCards">
+                        Randomize order
+                    </label>
+                </div>
                 <div class="navigation">
+                    <button id="firstCard">First</button>
                     <button id="prevCard">Previous</button>
                     <button id="flipCard">Flip Card</button>
                     <button id="nextCard">Next</button>
+                    <button id="lastCard">Last</button>
                 </div>
                 <div class="stats">
                     <span id="cardPosition">Card 0 of 0</span>
                 </div>
             </div>
             
+            <!-- Multiple Choice Mode -->
             <div id="multipleChoiceMode" class="mode-content hidden">
                 <h2>Multiple Choice Mode</h2>
                 <div class="quiz-container">
@@ -72,8 +85,9 @@
                 </div>
             </div>
             
-            <div id="writePronunciationMode" class="mode-content hidden">
-                <h2>Write Pronunciation Mode</h2>
+            <!-- Pronunciation Mode -->
+            <div id="pronunciationMode" class="mode-content hidden">
+                <h2>Pronunciation Mode</h2>
                 <div class="quiz-container">
                     <div class="question" id="wpQuestion">Question</div>
                     <div class="input-container">
@@ -85,12 +99,13 @@
                 </div>
             </div>
             
-            <div id="writeSpellingMode" class="mode-content hidden">
-                <h2>Write Spelling Mode</h2>
+            <!-- Writing/Spelling Mode -->
+            <div id="writingMode" class="mode-content hidden">
+                <h2>Writing/Spelling Mode</h2>
                 <div class="quiz-container">
                     <div class="question" id="wsQuestion">Question</div>
                     <div class="input-container">
-                        <input type="text" id="wsAnswer" placeholder="Enter spelling">
+                        <input type="text" id="wsAnswer" placeholder="Write the word">
                         <button id="wsSubmit">Check Answer</button>
                     </div>
                     <div class="feedback" id="wsFeedback"></div>

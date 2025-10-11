@@ -1,17 +1,20 @@
 // Global variables
 let cards = [];
 let currentCardIndex = 0;
-let currentMode = 'flashcard';
+let currentMode = 'editor';
+let isRandomized = false;
+let usedRandomIndices = new Set();
 const STORAGE_KEY = 'wordCardsData';
 
 // DOM elements
 const wordInput = document.getElementById('wordInput');
-const loadCardsBtn = document.getElementById('loadCards');
+const updateCardsBtn = document.getElementById('updateCards');
 const exportCardsBtn = document.getElementById('exportCards');
 const importCardsBtn = document.getElementById('importCards');
 const clearCardsBtn = document.getElementById('clearCards');
 const fileInput = document.getElementById('fileInput');
 const cardCount = document.getElementById('cardCount');
+const editorWarning = document.getElementById('editorWarning');
 const modeBtns = document.querySelectorAll('.mode-btn');
 const modeContents = document.querySelectorAll('.mode-content');
 
@@ -20,9 +23,12 @@ const flashcard = document.getElementById('flashcard');
 const cardWord = document.getElementById('cardWord');
 const cardPronunciation = document.getElementById('cardPronunciation');
 const cardMeaning = document.getElementById('cardMeaning');
+const firstCardBtn = document.getElementById('firstCard');
 const prevCardBtn = document.getElementById('prevCard');
 const flipCardBtn = document.getElementById('flipCard');
 const nextCardBtn = document.getElementById('nextCard');
+const lastCardBtn = document.getElementById('lastCard');
+const randomizeCheckbox = document.getElementById('randomizeCards');
 const cardPosition = document.getElementById('cardPosition');
 
 // Multiple choice elements
@@ -31,14 +37,14 @@ const mcOptions = document.getElementById('mcOptions');
 const mcFeedback = document.getElementById('mcFeedback');
 const mcNextBtn = document.getElementById('mcNext');
 
-// Write pronunciation elements
+// Word pronunciation elements
 const wpQuestion = document.getElementById('wpQuestion');
 const wpAnswer = document.getElementById('wpAnswer');
 const wpSubmitBtn = document.getElementById('wpSubmit');
 const wpFeedback = document.getElementById('wpFeedback');
 const wpNextBtn = document.getElementById('wpNext');
 
-// Write spelling elements
+// Writing/spelling elements
 const wsQuestion = document.getElementById('wsQuestion');
 const wsAnswer = document.getElementById('wsAnswer');
 const wsSubmitBtn = document.getElementById('wsSubmit');
@@ -56,34 +62,40 @@ function init() {
     });
     
     // Event listeners for card management
-    loadCardsBtn.addEventListener('click', loadCardsFromTextarea);
+    updateCardsBtn.addEventListener('click', loadCardsFromTextarea);
     exportCardsBtn.addEventListener('click', exportCards);
     importCardsBtn.addEventListener('click', importCards);
     clearCardsBtn.addEventListener('click', clearCards);
     fileInput.addEventListener('change', handleFileImport);
     
     // Event listeners for flashcard navigation
+    firstCardBtn.addEventListener('click', showFirstCard);
     prevCardBtn.addEventListener('click', showPrevCard);
     nextCardBtn.addEventListener('click', showNextCard);
+    lastCardBtn.addEventListener('click', showLastCard);
     flipCardBtn.addEventListener('click', flipCard);
     flashcard.addEventListener('click', flipCard);
+    randomizeCheckbox.addEventListener('change', toggleRandomize);
     
     // Event listeners for multiple choice mode
     mcNextBtn.addEventListener('click', nextMultipleChoiceQuestion);
     
-    // Event listeners for write pronunciation mode
+    // Event listeners for word pronunciation mode
     wpSubmitBtn.addEventListener('click', checkPronunciationAnswer);
     wpNextBtn.addEventListener('click', nextPronunciationQuestion);
     
-    // Event listeners for write spelling mode
+    // Event listeners for writing/spelling mode
     wsSubmitBtn.addEventListener('click', checkSpellingAnswer);
     wsNextBtn.addEventListener('click', nextSpellingQuestion);
+    
+    // Check for textarea changes
+    wordInput.addEventListener('input', checkForChanges);
     
     // Load cards from localStorage if available
     loadCardsFromStorage();
     
     // Set initial mode
-    setMode('flashcard');
+    setMode('editor');
 }
 
 // Load cards from localStorage
@@ -99,8 +111,8 @@ function loadCardsFromStorage() {
                 cardCount.textContent = `Loaded ${cards.length} cards from previous session`;
                 updateFlashcard();
                 initMultipleChoice();
-                initWritePronunciation();
-                initWriteSpelling();
+                initPronunciation();
+                initWriting();
             }
         } catch (e) {
             console.error('Error loading data from storage:', e);
@@ -117,6 +129,34 @@ function saveCardsToStorage() {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(dataToStore));
 }
 
+// Check if textarea content differs from loaded cards
+function checkForChanges() {
+    if (cards.length === 0) {
+        hideEditorWarning();
+        return;
+    }
+    
+    const currentText = wordInput.value.trim();
+    const currentCardsText = cards.map(card => 
+        `${card.word},${card.pronunciation},${card.meaning}`
+    ).join('\n');
+    
+    if (currentText !== currentCardsText) {
+        showEditorWarning('Changes detected. Click "Update Cards" to apply changes.');
+    } else {
+        hideEditorWarning();
+    }
+}
+
+function showEditorWarning(message) {
+    editorWarning.textContent = message;
+    editorWarning.classList.remove('hidden');
+}
+
+function hideEditorWarning() {
+    editorWarning.classList.add('hidden');
+}
+
 // Load cards from textarea
 function loadCardsFromTextarea() {
     const input = wordInput.value.trim();
@@ -125,13 +165,13 @@ function loadCardsFromTextarea() {
         return;
     }
     
-    cards = [];
+    const newCards = [];
     const lines = input.split('\n');
     
     for (const line of lines) {
         const parts = line.split(',');
         if (parts.length >= 3) {
-            cards.push({
+            newCards.push({
                 word: parts[0].trim(),
                 pronunciation: parts[1].trim(),
                 meaning: parts[2].trim()
@@ -139,22 +179,27 @@ function loadCardsFromTextarea() {
         }
     }
     
-    if (cards.length === 0) {
+    if (newCards.length === 0) {
         alert('No valid cards found. Please check your input format.');
         return;
     }
     
+    cards = newCards;
     cardCount.textContent = `Loaded ${cards.length} cards`;
     currentCardIndex = 0;
+    usedRandomIndices.clear();
     updateFlashcard();
     
     // Initialize other modes
     initMultipleChoice();
-    initWritePronunciation();
-    initWriteSpelling();
+    initPronunciation();
+    initWriting();
     
     // Save to localStorage
     saveCardsToStorage();
+    
+    // Hide warning
+    hideEditorWarning();
 }
 
 // Export cards to CSV file
@@ -208,6 +253,7 @@ function clearCards() {
         wordInput.value = '';
         cardCount.textContent = 'No cards loaded';
         currentCardIndex = 0;
+        usedRandomIndices.clear();
         updateFlashcard();
         
         // Clear localStorage
@@ -217,6 +263,9 @@ function clearCards() {
         mcFeedback.textContent = '';
         wpFeedback.textContent = '';
         wsFeedback.textContent = '';
+        
+        // Hide warning
+        hideEditorWarning();
     }
 }
 
@@ -241,15 +290,42 @@ function setMode(mode) {
             content.classList.add('hidden');
         }
     });
+    
+    // Handle empty states for learning modes
+    if (mode !== 'editor' && cards.length === 0) {
+        showEmptyState(mode);
+    }
+}
+
+// Show empty state for learning modes
+function showEmptyState(mode) {
+    const modeContent = document.getElementById(`${mode}Mode`);
+    const existingEmptyState = modeContent.querySelector('.empty-state');
+    
+    if (existingEmptyState) {
+        existingEmptyState.remove();
+    }
+    
+    const emptyState = document.createElement('div');
+    emptyState.className = 'empty-state';
+    emptyState.innerHTML = `
+        <h3>No Cards Available</h3>
+        <p>Please add some word cards in the Editor mode first.</p>
+        <button id="goToEditor" style="margin-top: 15px;">Go to Editor</button>
+    `;
+    
+    modeContent.appendChild(emptyState);
+    
+    // Add event listener to the button
+    document.getElementById('goToEditor').addEventListener('click', () => {
+        setMode('editor');
+    });
 }
 
 // Flashcard functions
 function updateFlashcard() {
     if (cards.length === 0) {
-        cardWord.textContent = 'No cards loaded';
-        cardPronunciation.textContent = 'Add cards to begin';
-        cardMeaning.textContent = 'Use the input area above';
-        cardPosition.textContent = 'Card 0 of 0';
+        showEmptyState('flashcard');
         return;
     }
     
@@ -265,26 +341,74 @@ function updateFlashcard() {
     cardPosition.textContent = `Card ${currentCardIndex + 1} of ${cards.length}`;
 }
 
+function showFirstCard() {
+    if (cards.length === 0) return;
+    
+    currentCardIndex = 0;
+    usedRandomIndices.clear();
+    updateFlashcard();
+}
+
+function showLastCard() {
+    if (cards.length === 0) return;
+    
+    currentCardIndex = cards.length - 1;
+    usedRandomIndices.clear();
+    updateFlashcard();
+}
+
 function showPrevCard() {
     if (cards.length === 0) return;
     
-    currentCardIndex = (currentCardIndex - 1 + cards.length) % cards.length;
+    if (isRandomized) {
+        getRandomCard();
+    } else {
+        currentCardIndex = (currentCardIndex - 1 + cards.length) % cards.length;
+    }
     updateFlashcard();
 }
 
 function showNextCard() {
     if (cards.length === 0) return;
     
-    currentCardIndex = (currentCardIndex + 1) % cards.length;
+    if (isRandomized) {
+        getRandomCard();
+    } else {
+        currentCardIndex = (currentCardIndex + 1) % cards.length;
+    }
     updateFlashcard();
+}
+
+function getRandomCard() {
+    if (usedRandomIndices.size >= cards.length) {
+        usedRandomIndices.clear();
+    }
+    
+    let randomIndex;
+    do {
+        randomIndex = Math.floor(Math.random() * cards.length);
+    } while (usedRandomIndices.has(randomIndex) && usedRandomIndices.size < cards.length);
+    
+    usedRandomIndices.add(randomIndex);
+    currentCardIndex = randomIndex;
 }
 
 function flipCard() {
     flashcard.classList.toggle('flipped');
 }
 
+function toggleRandomize() {
+    isRandomized = randomizeCheckbox.checked;
+    usedRandomIndices.clear();
+    
+    if (isRandomized && cards.length > 0) {
+        usedRandomIndices.add(currentCardIndex);
+    }
+}
+
 // Multiple choice functions
 let currentMCQuestion = null;
+let mcAnswered = false;
 
 function initMultipleChoice() {
     if (cards.length === 0) return;
@@ -293,14 +417,14 @@ function initMultipleChoice() {
 
 function nextMultipleChoiceQuestion() {
     if (cards.length === 0) {
-        mcQuestion.textContent = 'No cards loaded. Add cards to begin.';
-        mcOptions.innerHTML = '';
+        showEmptyState('multipleChoice');
         return;
     }
     
-    // Clear previous feedback
+    // Clear previous feedback and reset state
     mcFeedback.textContent = '';
     mcFeedback.className = 'feedback';
+    mcAnswered = false;
     
     // Randomly select a question type
     const questionTypes = ['meaning', 'pronunciation'];
@@ -336,15 +460,29 @@ function nextMultipleChoiceQuestion() {
         const button = document.createElement('button');
         button.className = 'option';
         button.textContent = word;
-        button.addEventListener('click', () => checkMultipleChoiceAnswer(word, correctCard.word));
+        button.addEventListener('click', () => checkMultipleChoiceAnswer(word, correctCard.word, button));
         mcOptions.appendChild(button);
     });
     
     currentMCQuestion = { correctWord: correctCard.word };
 }
 
-function checkMultipleChoiceAnswer(selectedWord, correctWord) {
+function checkMultipleChoiceAnswer(selectedWord, correctWord, button) {
+    if (mcAnswered) return;
+    
+    mcAnswered = true;
     const isCorrect = selectedWord === correctWord;
+    
+    // Highlight all buttons
+    const allButtons = mcOptions.querySelectorAll('.option');
+    allButtons.forEach(btn => {
+        btn.classList.add('disabled');
+        if (btn.textContent === correctWord) {
+            btn.classList.add('correct');
+        } else if (btn === button && !isCorrect) {
+            btn.classList.add('incorrect');
+        }
+    });
     
     if (isCorrect) {
         mcFeedback.textContent = 'Correct!';
@@ -355,17 +493,17 @@ function checkMultipleChoiceAnswer(selectedWord, correctWord) {
     }
 }
 
-// Write pronunciation functions
+// Pronunciation functions
 let currentWPQuestion = null;
 
-function initWritePronunciation() {
+function initPronunciation() {
     if (cards.length === 0) return;
     nextPronunciationQuestion();
 }
 
 function nextPronunciationQuestion() {
     if (cards.length === 0) {
-        wpQuestion.textContent = 'No cards loaded. Add cards to begin.';
+        showEmptyState('pronunciation');
         return;
     }
     
@@ -408,17 +546,17 @@ function checkPronunciationAnswer() {
     }
 }
 
-// Write spelling functions
+// Writing/spelling functions
 let currentWSQuestion = null;
 
-function initWriteSpelling() {
+function initWriting() {
     if (cards.length === 0) return;
     nextSpellingQuestion();
 }
 
 function nextSpellingQuestion() {
     if (cards.length === 0) {
-        wsQuestion.textContent = 'No cards loaded. Add cards to begin.';
+        showEmptyState('writing');
         return;
     }
     
