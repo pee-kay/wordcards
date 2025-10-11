@@ -17,7 +17,12 @@
 谢谢,xièxie,thank you
 再见,zàijiàn,goodbye
 你好,nǐ hǎo,hello"></textarea>
-            <button id="loadCards">Load Cards</button>
+            <div class="button-group">
+                <button id="loadCards">Load Cards</button>
+                <button id="exportCards">Export CSV</button>
+                <button id="importCards">Load from File</button>
+                <button id="clearCards">Clear All</button>
+            </div>
             <div id="cardCount" class="stats">No cards loaded</div>
         </div>
         
@@ -94,6 +99,9 @@
             </div>
         </div>
     </div>
+
+    <!-- Hidden file input for importing -->
+    <input type="file" id="fileInput" accept=".csv,.txt" style="display: none;">
 
     <script src="script.js"></script>
 </body>

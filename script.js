@@ -2,10 +2,15 @@
 let cards = [];
 let currentCardIndex = 0;
 let currentMode = 'flashcard';
+const STORAGE_KEY = 'wordCardsData';
 
 // DOM elements
 const wordInput = document.getElementById('wordInput');
 const loadCardsBtn = document.getElementById('loadCards');
+const exportCardsBtn = document.getElementById('exportCards');
+const importCardsBtn = document.getElementById('importCards');
+const clearCardsBtn = document.getElementById('clearCards');
+const fileInput = document.getElementById('fileInput');
 const cardCount = document.getElementById('cardCount');
 const modeBtns = document.querySelectorAll('.mode-btn');
 const modeContents = document.querySelectorAll('.mode-content');
@@ -50,8 +55,12 @@ function init() {
         });
     });
     
-    // Event listeners for loading cards
-    loadCardsBtn.addEventListener('click', loadCards);
+    // Event listeners for card management
+    loadCardsBtn.addEventListener('click', loadCardsFromTextarea);
+    exportCardsBtn.addEventListener('click', exportCards);
+    importCardsBtn.addEventListener('click', importCards);
+    clearCardsBtn.addEventListener('click', clearCards);
+    fileInput.addEventListener('change', handleFileImport);
     
     // Event listeners for flashcard navigation
     prevCardBtn.addEventListener('click', showPrevCard);
@@ -70,12 +79,46 @@ function init() {
     wsSubmitBtn.addEventListener('click', checkSpellingAnswer);
     wsNextBtn.addEventListener('click', nextSpellingQuestion);
     
+    // Load cards from localStorage if available
+    loadCardsFromStorage();
+    
     // Set initial mode
     setMode('flashcard');
 }
 
+// Load cards from localStorage
+function loadCardsFromStorage() {
+    const storedData = localStorage.getItem(STORAGE_KEY);
+    if (storedData) {
+        try {
+            const parsedData = JSON.parse(storedData);
+            cards = parsedData.cards || [];
+            wordInput.value = parsedData.textareaContent || '';
+            
+            if (cards.length > 0) {
+                cardCount.textContent = `Loaded ${cards.length} cards from previous session`;
+                updateFlashcard();
+                initMultipleChoice();
+                initWritePronunciation();
+                initWriteSpelling();
+            }
+        } catch (e) {
+            console.error('Error loading data from storage:', e);
+        }
+    }
+}
+
+// Save cards to localStorage
+function saveCardsToStorage() {
+    const dataToStore = {
+        cards: cards,
+        textareaContent: wordInput.value
+    };
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(dataToStore));
+}
+
 // Load cards from textarea
-function loadCards() {
+function loadCardsFromTextarea() {
     const input = wordInput.value.trim();
     if (!input) {
         alert('Please enter some word cards');
@@ -109,6 +152,72 @@ function loadCards() {
     initMultipleChoice();
     initWritePronunciation();
     initWriteSpelling();
+    
+    // Save to localStorage
+    saveCardsToStorage();
+}
+
+// Export cards to CSV file
+function exportCards() {
+    if (cards.length === 0) {
+        alert('No cards to export');
+        return;
+    }
+    
+    const csvContent = cards.map(card => 
+        `${card.word},${card.pronunciation},${card.meaning}`
+    ).join('\n');
+    
+    const blob = new Blob([csvContent], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'word-cards.csv';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+}
+
+// Import cards from file
+function importCards() {
+    fileInput.click();
+}
+
+// Handle file import
+function handleFileImport(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+    
+    const reader = new FileReader();
+    reader.onload = function(e) {
+        const content = e.target.result;
+        wordInput.value = content;
+        loadCardsFromTextarea();
+    };
+    reader.readAsText(file);
+    
+    // Reset file input
+    event.target.value = '';
+}
+
+// Clear all cards
+function clearCards() {
+    if (confirm('Are you sure you want to clear all cards?')) {
+        cards = [];
+        wordInput.value = '';
+        cardCount.textContent = 'No cards loaded';
+        currentCardIndex = 0;
+        updateFlashcard();
+        
+        // Clear localStorage
+        localStorage.removeItem(STORAGE_KEY);
+        
+        // Reset quiz modes
+        mcFeedback.textContent = '';
+        wpFeedback.textContent = '';
+        wsFeedback.textContent = '';
+    }
 }
 
 // Set the current learning mode
@@ -136,7 +245,13 @@ function setMode(mode) {
 
 // Flashcard functions
 function updateFlashcard() {
-    if (cards.length === 0) return;
+    if (cards.length === 0) {
+        cardWord.textContent = 'No cards loaded';
+        cardPronunciation.textContent = 'Add cards to begin';
+        cardMeaning.textContent = 'Use the input area above';
+        cardPosition.textContent = 'Card 0 of 0';
+        return;
+    }
     
     const card = cards[currentCardIndex];
     cardWord.textContent = card.word;
@@ -177,7 +292,11 @@ function initMultipleChoice() {
 }
 
 function nextMultipleChoiceQuestion() {
-    if (cards.length === 0) return;
+    if (cards.length === 0) {
+        mcQuestion.textContent = 'No cards loaded. Add cards to begin.';
+        mcOptions.innerHTML = '';
+        return;
+    }
     
     // Clear previous feedback
     mcFeedback.textContent = '';
@@ -245,7 +364,10 @@ function initWritePronunciation() {
 }
 
 function nextPronunciationQuestion() {
-    if (cards.length === 0) return;
+    if (cards.length === 0) {
+        wpQuestion.textContent = 'No cards loaded. Add cards to begin.';
+        return;
+    }
     
     // Clear previous feedback and input
     wpFeedback.textContent = '';
@@ -295,7 +417,10 @@ function initWriteSpelling() {
 }
 
 function nextSpellingQuestion() {
-    if (cards.length === 0) return;
+    if (cards.length === 0) {
+        wsQuestion.textContent = 'No cards loaded. Add cards to begin.';
+        return;
+    }
     
     // Clear previous feedback and input
     wsFeedback.textContent = '';
