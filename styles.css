@@ -493,3 +493,134 @@ input[type="text"] {
         height: 64px;
     }
 }
+
+/* Stroke order page */
+.stroke-layout-options {
+    align-items: flex-end;
+}
+
+.stroke-print-root {
+    min-height: 80px;
+}
+
+.stroke-char-block {
+    margin-bottom: 28px;
+    break-inside: avoid;
+    page-break-inside: avoid;
+}
+
+.stroke-char-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 6px 14px;
+    margin-bottom: 10px;
+}
+
+.stroke-char-title-glyph {
+    font-size: 2rem;
+    font-family: 'Noto Sans SC', 'Source Han Sans SC', 'PingFang SC', 'Microsoft YaHei', 'SimHei', sans-serif;
+    line-height: 1.2;
+}
+
+.stroke-char-title-pinyin {
+    font-size: 1rem;
+    color: #5d6d7e;
+}
+
+.stroke-char-missing {
+    color: #c0392b;
+    font-size: 14px;
+    padding: 8px 0;
+}
+
+.stroke-steps {
+    display: grid;
+    grid-template-columns: repeat(
+        var(--stroke-steps-cols, 8),
+        minmax(var(--stroke-step-min, 88px), 1fr)
+    );
+    gap: 8px 10px;
+    justify-content: start;
+    width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+}
+
+.stroke-step {
+    box-sizing: border-box;
+    border: 1px solid #dfe4e8;
+    border-radius: 6px;
+    padding: 6px 6px 4px;
+    text-align: center;
+    background: #fafbfc;
+    overflow: visible;
+}
+
+.stroke-step-svg-wrap {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0 auto;
+    overflow: visible;
+}
+
+.stroke-step-svg-el {
+    display: block;
+    flex-shrink: 0;
+    overflow: visible;
+}
+
+.stroke-step-num {
+    display: block;
+    margin-top: 4px;
+    font-size: 11px;
+    color: #7f8c8d;
+}
+
+@media print {
+    body.strokes-page {
+        background: #fff;
+        padding: 0;
+    }
+
+    body.strokes-page .no-print,
+    body.strokes-page .site-nav,
+    body.strokes-page .container > .section:not(#strokePreviewSection) {
+        display: none !important;
+    }
+
+    body.strokes-page .container,
+    body.strokes-page .container--wide {
+        max-width: none;
+        box-shadow: none;
+        padding: 0;
+        margin: 0;
+    }
+
+    body.strokes-page #strokePreviewSection {
+        background: transparent;
+        padding: 0;
+        margin: 0;
+    }
+
+    body.strokes-page .print-root {
+        border: none;
+        padding: 0;
+        margin: 0;
+    }
+
+    body.strokes-page .stroke-step {
+        background: #fff;
+        break-inside: avoid;
+    }
+
+    body.strokes-page .stroke-char-block {
+        break-inside: avoid;
+        page-break-inside: avoid;
+    }
+
+    body.strokes-page .stroke-steps {
+        overflow-x: visible;
+    }
+}

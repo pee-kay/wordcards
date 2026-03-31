@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Stroke order practice</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body class="strokes-page">
+    <div class="container container--wide">
+        <header class="page-header no-print">
+            <h1>Stroke order practice</h1>
+            <p class="subtitle">Build a printable sheet: each character is shown step by step in correct stroke order (data from <a href="https://hanziwriter.org/" rel="noopener noreferrer">Hanzi Writer</a> / Make Me a Hanzi).</p>
+            <nav class="site-nav">
+                <a href="index.html">Word cards</a>
+                <a href="radicals.html">Radicals / components</a>
+                <a href="strokes.html" aria-current="page">Stroke order</a>
+            </nav>
+        </header>
+
+        <div class="section">
+            <h2>Word list</h2>
+            <p class="help">Same formats as the radicals page: <code>word,pronunciation,meaning</code>, <code>word,pronunciation</code>, or one entry per line. Pinyin uses <a href="https://github.com/zh-lx/pinyin-pro" rel="noopener noreferrer">pinyin-pro</a> when available. Characters must exist in Hanzi Writer’s dataset (most common simplified forms; rare characters may fail).</p>
+            <textarea id="strokeWordInput" placeholder="永
+好
+或: 你好,nǐ hǎo,hello"></textarea>
+            <div class="button-group">
+                <button type="button" id="strokeExport">Export CSV</button>
+                <button type="button" id="strokeImport">Import CSV</button>
+            </div>
+            <input type="file" id="strokeFileInput" accept=".csv,.txt" class="hidden-file-input" aria-hidden="true">
+        </div>
+
+        <div class="section">
+            <h2>Layout & PDF</h2>
+            <div class="radical-options stroke-layout-options">
+                <label class="field">
+                    <span>Step boxes per row</span>
+                    <input type="number" id="strokeStepsPerRow" min="4" max="24" value="8">
+                </label>
+                <label class="field">
+                    <span>Step size (px)</span>
+                    <input type="number" id="strokeStepSize" min="40" max="120" value="64">
+                </label>
+                <label class="checkbox-label">
+                    <input type="checkbox" id="strokeShowPinyin" checked>
+                    Show pinyin under each character title
+                </label>
+            </div>
+            <div class="button-group">
+                <button type="button" id="strokeBuild">Update preview</button>
+                <button type="button" id="strokePrint" class="btn-primary">Print / Save as PDF</button>
+            </div>
+            <p id="strokeStats" class="stats">No characters yet</p>
+            <div id="strokeWarning" class="warning hidden" role="alert"></div>
+            <div id="strokeLoading" class="info hidden" role="status">Loading stroke data…</div>
+        </div>
+
+        <div class="section" id="strokePreviewSection">
+            <h2 class="no-print">Preview</h2>
+            <p class="help no-print">Print hides the controls above. Each row under a character is stroke 1, then strokes 1–2, … until the full character.</p>
+            <div id="strokePrintRoot" class="print-root stroke-print-root"></div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/hanzi-writer@3.5.0/dist/hanzi-writer.min.js"></script>
+    <script src="https://unpkg.com/pinyin-pro@3.26.0/dist/index.js"></script>
+    <script src="strokes.js"></script>
+</body>
+</html>
