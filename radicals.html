@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Character & radical practice</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body class="radicals-page">
+    <div class="container container--wide">
+        <header class="page-header no-print">
+            <h1>Character & component practice</h1>
+            <p class="subtitle">Build a printable grid from your word list. Each cell shows a character with a random part hidden and its pinyin.</p>
+            <nav class="site-nav">
+                <a href="index.html">Word cards</a>
+                <a href="radicals.html" aria-current="page">Radicals / components</a>
+            </nav>
+        </header>
+
+        <div class="section">
+            <h2>Word list</h2>
+            <p class="help">Word Cards style: <code>word,pronunciation,meaning</code> per line; or <code>word,pronunciation</code>; or a <strong>single column</strong> (one entry per line—character or word). Missing pinyin is filled with <a href="https://github.com/zh-lx/pinyin-pro" rel="noopener noreferrer">pinyin-pro</a> when the script loads (needs network). You can also use <strong>space-separated</strong> syllables in the pronunciation field to match the Chinese characters in each word.</p>
+            <textarea id="radicalWordInput" placeholder="谢
+谢
+好
+或: 谢谢,xiè xie,thank you"></textarea>
+            <div class="button-group">
+                <button type="button" id="radicalExport">Export CSV</button>
+                <button type="button" id="radicalImport">Import CSV</button>
+            </div>
+            <input type="file" id="radicalFileInput" accept=".csv,.txt" class="hidden-file-input" aria-hidden="true">
+        </div>
+
+        <div class="section">
+            <h2>Grid & PDF</h2>
+            <div class="radical-options">
+                <label class="field">
+                    <span>Columns</span>
+                    <input type="number" id="radicalCols" min="2" max="12" value="6">
+                </label>
+                <label class="field">
+                    <span>Random seed</span>
+                    <input type="text" id="radicalSeed" placeholder="empty = random each time" inputmode="numeric" autocomplete="off">
+                </label>
+                <label class="checkbox-label">
+                    <input type="checkbox" id="radicalShuffle">
+                    Shuffle character order
+                </label>
+                <label class="checkbox-label">
+                    <input type="checkbox" id="radicalAnswerKey" checked>
+                    Second page: answer key (full characters)
+                </label>
+            </div>
+            <div class="button-group">
+                <button type="button" id="radicalBuild">Update preview</button>
+                <button type="button" id="radicalPrint" class="btn-primary">Print / Save as PDF</button>
+            </div>
+            <p id="radicalStats" class="stats">No characters yet</p>
+            <div id="radicalWarning" class="warning hidden" role="alert"></div>
+        </div>
+
+        <div class="section" id="radicalPreviewSection">
+            <h2 class="no-print">Preview</h2>
+            <p class="help no-print">Use your browser’s print dialog and choose “Save as PDF”. Landscape often fits more columns. Hidden regions are random parts of the glyph (approximate “missing component” practice, not a linguistic radical database).</p>
+            <div id="radicalPrintRoot" class="print-root">
+                <div class="print-sheet print-sheet--exercise">
+                    <h2 class="print-title">Fill in the missing parts — character practice</h2>
+                    <div id="radicalGridExercise" class="radical-grid"></div>
+                </div>
+                <div class="print-sheet print-sheet--answers">
+                    <h2 class="print-title">Answer key</h2>
+                    <div id="radicalGridAnswers" class="radical-grid radical-grid--answers"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://unpkg.com/pinyin-pro@3.26.0/dist/index.js"></script>
+    <script src="radicals.js"></script>
+</body>
+</html>
