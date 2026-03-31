@@ -2,13 +2,13 @@
     'use strict';
 
     const STORAGE_KEY = 'wordCardsStrokesInput';
+    const HANZI_WRITER_DATA_BASE = 'https://cdn.jsdelivr.net/npm/hanzi-writer-data@2.0';
 
     const wordInput = document.getElementById('strokeWordInput');
     const stepsPerRowInput = document.getElementById('strokeStepsPerRow');
     const stepSizeInput = document.getElementById('strokeStepSize');
     const showPinyinCheck = document.getElementById('strokeShowPinyin');
     const buildBtn = document.getElementById('strokeBuild');
-    const printBtn = document.getElementById('strokePrint');
     const statsEl = document.getElementById('strokeStats');
     const warningEl = document.getElementById('strokeWarning');
     const loadingEl = document.getElementById('strokeLoading');
@@ -163,18 +163,24 @@
         return svg;
     }
 
-    function loadCharData(ch) {
-        if (typeof HanziWriter === 'undefined' || !HanziWriter.loadCharacterData) {
-            return Promise.reject(new Error('Hanzi Writer not loaded'));
+    async function loadCharData(ch) {
+        try {
+            const url = `${HANZI_WRITER_DATA_BASE}/${ch}.json`;
+            const res = await fetch(url, { mode: 'cors', credentials: 'omit' });
+            if (!res.ok) return null;
+            const d = await res.json();
+            if (d && Array.isArray(d.strokes) && d.strokes.length > 0) return d;
+            return null;
+        } catch (_) {
+            return null;
         }
-        return HanziWriter.loadCharacterData(ch);
     }
 
     async function runBuild() {
         hideWarning();
         printRoot.innerHTML = '';
 
-        if (typeof HanziWriter === 'undefined') {
+        if (typeof HanziWriter === 'undefined' || typeof HanziWriter.getScalingTransform !== 'function') {
             showWarning('Hanzi Writer failed to load. Check your network and refresh.');
             statsEl.textContent = 'Hanzi Writer unavailable';
             return;
@@ -216,33 +222,25 @@
         const unique = [...new Set(chars)];
         setLoading(true);
         buildBtn.disabled = true;
-        printBtn.disabled = true;
 
         const dataMap = new Map();
         const failed = [];
 
         try {
             await Promise.all(
-                unique.map((ch) =>
-                    loadCharData(ch)
-                        .then((data) => {
-                            if (data && Array.isArray(data.strokes) && data.strokes.length > 0) {
-                                dataMap.set(ch, data);
-                            } else {
-                                dataMap.set(ch, null);
-                                failed.push(ch);
-                            }
-                        })
-                        .catch(() => {
-                            dataMap.set(ch, null);
-                            failed.push(ch);
-                        })
-                )
+                unique.map(async (ch) => {
+                    const data = await loadCharData(ch);
+                    if (data) {
+                        dataMap.set(ch, data);
+                    } else {
+                        dataMap.set(ch, null);
+                        failed.push(ch);
+                    }
+                })
             );
         } finally {
             setLoading(false);
             buildBtn.disabled = false;
-            printBtn.disabled = false;
         }
 
         if (failed.length > 0) {
@@ -326,12 +324,6 @@
         statsEl.textContent = `${okChars} of ${chars.length} characters rendered · ${totalSteps} stroke steps total`;
     }
 
-    function printSheet() {
-        setTimeout(function () {
-            window.print();
-        }, 150);
-    }
-
     function exportCsv() {
         const raw = wordInput.value;
         if (!raw.trim()) {
@@ -361,14 +353,6 @@
             localStorage.setItem(STORAGE_KEY, wordInput.value);
         } catch (_) {}
         await runBuild();
-    });
-
-    printBtn.addEventListener('click', async function () {
-        try {
-            localStorage.setItem(STORAGE_KEY, wordInput.value);
-        } catch (_) {}
-        await runBuild();
-        printSheet();
     });
 
     exportBtn.addEventListener('click', exportCsv);

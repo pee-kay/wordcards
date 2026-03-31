@@ -9,11 +9,11 @@
 <body class="radicals-page">
     <div class="container container--wide">
         <header class="page-header no-print">
-            <h1>Character & component practice</h1>
-            <p class="subtitle">Build a printable grid from your word list. Each cell shows a character with a random part hidden and its pinyin.</p>
+            <h1>Missing strokes / radicals practice</h1>
+            <p class="subtitle">Build a printable grid from your word list. Each cell shows a character with chosen strokes hidden (from <a href="https://hanziwriter.org/" rel="noopener noreferrer">Hanzi Writer</a> stroke data) and its pinyin.</p>
             <nav class="site-nav">
                 <a href="index.html">Word cards</a>
-                <a href="radicals.html" aria-current="page">Radicals / components</a>
+                <a href="radicals.html" aria-current="page">Missing strokes / radicals</a>
                 <a href="strokes.html">Stroke order</a>
             </nav>
         </header>
@@ -35,6 +35,14 @@
         <div class="section">
             <h2>Grid & PDF</h2>
             <div class="radical-options">
+                <label class="field field--grow">
+                    <span>What to hide</span>
+                    <select id="radicalHideMode" aria-describedby="radicalHideModeHelp">
+                        <option value="radical">Radical (all strokes marked as radical in the dataset)</option>
+                        <option value="single">Single stroke (random)</option>
+                        <option value="multiple">Multiple strokes (random, 2–5 or fewer if needed)</option>
+                    </select>
+                </label>
                 <label class="field">
                     <span>Columns</span>
                     <input type="number" id="radicalCols" min="2" max="12" value="6">
@@ -53,16 +61,17 @@
                 </label>
             </div>
             <div class="button-group">
-                <button type="button" id="radicalBuild">Update preview</button>
-                <button type="button" id="radicalPrint" class="btn-primary">Print / Save as PDF</button>
+                <button type="button" id="radicalBuild" class="btn-primary">Generate</button>
             </div>
             <p id="radicalStats" class="stats">No characters yet</p>
+            <p id="radicalHideModeHelp" class="help radical-hide-help no-print">Radical mode uses <code>radStrokes</code> from the character file. If a character has no radical list, a random single stroke is hidden instead. Changing <strong>What to hide</strong> refreshes the preview automatically.</p>
             <div id="radicalWarning" class="warning hidden" role="alert"></div>
+            <div id="radicalLoading" class="info hidden" role="status">Loading character stroke data…</div>
         </div>
 
         <div class="section" id="radicalPreviewSection">
             <h2 class="no-print">Preview</h2>
-            <p class="help no-print">Use your browser’s print dialog and choose “Save as PDF”. Landscape often fits more columns. Hidden regions are random parts of the glyph (approximate “missing component” practice, not a linguistic radical database).</p>
+            <p class="help no-print">Use your browser’s print dialog and choose “Save as PDF”. Landscape often fits more columns. Characters without Hanzi Writer data use a simple font mask instead.</p>
             <div id="radicalPrintRoot" class="print-root">
                 <div class="print-sheet print-sheet--exercise">
                     <h2 class="print-title">Fill in the missing parts — character practice</h2>
@@ -76,6 +85,7 @@
         </div>
     </div>
 
+    <script src="https://cdn.jsdelivr.net/npm/hanzi-writer@3.5.0/dist/hanzi-writer.min.js"></script>
     <script src="https://unpkg.com/pinyin-pro@3.26.0/dist/index.js"></script>
     <script src="radicals.js"></script>
 </body>

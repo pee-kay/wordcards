@@ -2,16 +2,24 @@
     'use strict';
 
     const STORAGE_KEY = 'wordCardsRadicalsInput';
+    /** Same dataset as Hanzi Writer; load via fetch to avoid broken parallel loads on HanziWriter.loadCharacterData (singleton LoadingManager). */
+    const HANZI_WRITER_DATA_BASE = 'https://cdn.jsdelivr.net/npm/hanzi-writer-data@2.0';
+
+    const SVG_SIZE = 72;
+    const SVG_PADDING = Math.max(2, Math.round(SVG_SIZE * 0.08));
+
+    const charDataCache = new Map();
 
     const wordInput = document.getElementById('radicalWordInput');
     const colsInput = document.getElementById('radicalCols');
     const seedInput = document.getElementById('radicalSeed');
+    const hideModeSelect = document.getElementById('radicalHideMode');
     const shuffleCheck = document.getElementById('radicalShuffle');
     const answerKeyCheck = document.getElementById('radicalAnswerKey');
     const buildBtn = document.getElementById('radicalBuild');
-    const printBtn = document.getElementById('radicalPrint');
     const statsEl = document.getElementById('radicalStats');
     const warningEl = document.getElementById('radicalWarning');
+    const loadingEl = document.getElementById('radicalLoading');
     const gridExercise = document.getElementById('radicalGridExercise');
     const gridAnswers = document.getElementById('radicalGridAnswers');
     const printRoot = document.getElementById('radicalPrintRoot');
@@ -145,6 +153,79 @@
         return h >>> 0;
     }
 
+    function shuffleInPlace(arr, rng) {
+        for (let i = arr.length - 1; i > 0; i--) {
+            const j = Math.floor(rng() * (i + 1));
+            [arr[i], arr[j]] = [arr[j], arr[i]];
+        }
+    }
+
+    function pickHiddenStrokeIndices(mode, charData, rng) {
+        const n = (charData.strokes || []).length;
+        if (n <= 1) {
+            return { hidden: new Set(), radicalFallback: false };
+        }
+
+        if (mode === 'radical') {
+            const rad = (charData.radStrokes || [])
+                .map(Number)
+                .filter((i) => Number.isInteger(i) && i >= 0 && i < n);
+            if (rad.length === 0) {
+                return {
+                    hidden: new Set([Math.floor(rng() * n)]),
+                    radicalFallback: true
+                };
+            }
+            const hidden = new Set(rad);
+            if (hidden.size >= n) {
+                hidden.delete(Math.floor(rng() * n));
+            }
+            return { hidden, radicalFallback: false };
+        }
+
+        if (mode === 'single') {
+            return { hidden: new Set([Math.floor(rng() * n)]), radicalFallback: false };
+        }
+
+        const maxHide = Math.min(n - 1, 5);
+        const minHide = Math.min(2, maxHide);
+        if (maxHide < 1) {
+            return { hidden: new Set(), radicalFallback: false };
+        }
+        const span = maxHide - minHide + 1;
+        const k = minHide + Math.floor(rng() * span);
+        const pickCount = Math.max(1, Math.min(k, n - 1));
+        const indices = [];
+        for (let i = 0; i < n; i++) indices.push(i);
+        shuffleInPlace(indices, rng);
+        return { hidden: new Set(indices.slice(0, pickCount)), radicalFallback: false };
+    }
+
+    function renderPartialCharacterSvg(charData, hiddenStrokeIndices, width, height, padding) {
+        const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+        svg.setAttribute('width', String(width));
+        svg.setAttribute('height', String(height));
+        svg.setAttribute('viewBox', `0 0 ${width} ${height}`);
+        svg.setAttribute('overflow', 'visible');
+
+        const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+        if (typeof HanziWriter !== 'undefined' && HanziWriter.getScalingTransform) {
+            const transformData = HanziWriter.getScalingTransform(width, height, padding);
+            g.setAttributeNS(null, 'transform', transformData.transform);
+        }
+        svg.appendChild(g);
+
+        charData.strokes.forEach(function (strokePath, i) {
+            if (hiddenStrokeIndices.has(i)) return;
+            const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+            path.setAttributeNS(null, 'd', strokePath);
+            path.setAttribute('fill', '#222');
+            g.appendChild(path);
+        });
+
+        return svg;
+    }
+
     function drawMaskedCharacter(char, rng) {
         const size = 160;
         const canvas = document.createElement('canvas');
@@ -207,6 +288,27 @@
         return canvas.toDataURL('image/png');
     }
 
+    function drawFullCharacterCanvas(char) {
+        const size = 160;
+        const canvas = document.createElement('canvas');
+        canvas.width = size;
+        canvas.height = size;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return '';
+
+        const fontPx = Math.round(size * 0.72);
+        ctx.fillStyle = '#1a1a1a';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.font = `${fontPx}px "Noto Sans SC", "Source Han Sans SC", "PingFang SC", "Microsoft YaHei", "SimHei", sans-serif`;
+        ctx.fillText(char, size / 2, size / 2);
+        ctx.strokeStyle = '#cccccc';
+        ctx.lineWidth = 1;
+        ctx.strokeRect(0.5, 0.5, size - 1, size - 1);
+
+        return canvas.toDataURL('image/png');
+    }
+
     function showWarning(msg) {
         warningEl.textContent = msg;
         warningEl.classList.remove('hidden');
@@ -216,19 +318,79 @@
         warningEl.classList.add('hidden');
     }
 
-    function shuffleInPlace(arr, rng) {
-        for (let i = arr.length - 1; i > 0; i--) {
-            const j = Math.floor(rng() * (i + 1));
-            [arr[i], arr[j]] = [arr[j], arr[i]];
+    function setLoading(on) {
+        loadingEl.classList.toggle('hidden', !on);
+    }
+
+    async function fetchCharData(ch) {
+        if (charDataCache.has(ch)) {
+            return charDataCache.get(ch);
+        }
+        try {
+            const url = `${HANZI_WRITER_DATA_BASE}/${ch}.json`;
+            const res = await fetch(url, { mode: 'cors', credentials: 'omit' });
+            if (!res.ok) {
+                charDataCache.set(ch, null);
+                return null;
+            }
+            const d = await res.json();
+            if (d && Array.isArray(d.strokes) && d.strokes.length > 0) {
+                charDataCache.set(ch, d);
+                return d;
+            }
+            charDataCache.set(ch, null);
+            return null;
+        } catch (_) {
+            charDataCache.set(ch, null);
+            return null;
         }
     }
 
-    function buildCells(chars, pinyinList, rng) {
-        return chars.map((ch, i) => ({
-            char: ch,
-            pinyin: pinyinList[i],
-            maskedSrc: drawMaskedCharacter(ch, rng)
-        }));
+    async function loadCharDataMap(chars) {
+        const unique = [...new Set(chars)];
+        const map = new Map();
+        await Promise.all(
+            unique.map(async (ch) => {
+                const d = await fetchCharData(ch);
+                map.set(ch, d);
+            })
+        );
+        return map;
+    }
+
+    function buildCells(chars, pinyinList, rng, hideMode, dataMap, canScale) {
+        let strokeDataFallback = 0;
+        let radicalListFallback = 0;
+
+        const cells = chars.map((ch, i) => {
+            const data = dataMap.get(ch);
+            if (!data || !canScale) {
+                strokeDataFallback += 1;
+                return {
+                    char: ch,
+                    pinyin: pinyinList[i],
+                    exerciseKind: 'canvas',
+                    canvasSrc: drawMaskedCharacter(ch, rng),
+                    answerCanvasSrc: drawFullCharacterCanvas(ch)
+                };
+            }
+
+            const { hidden, radicalFallback } = pickHiddenStrokeIndices(hideMode, data, rng);
+            if (radicalFallback) radicalListFallback += 1;
+
+            const emptyHidden = new Set();
+            const svg = renderPartialCharacterSvg(data, hidden, SVG_SIZE, SVG_SIZE, SVG_PADDING);
+            const answerSvg = renderPartialCharacterSvg(data, emptyHidden, SVG_SIZE, SVG_SIZE, SVG_PADDING);
+            return {
+                char: ch,
+                pinyin: pinyinList[i],
+                exerciseKind: 'svg',
+                exerciseSvg: svg,
+                answerSvg: answerSvg
+            };
+        });
+
+        return { cells, strokeDataFallback, radicalListFallback };
     }
 
     function renderGrid(container, cells, cols, mode) {
@@ -240,16 +402,36 @@
             wrap.className = 'radical-cell';
 
             if (mode === 'exercise') {
-                const img = document.createElement('img');
-                img.className = 'radical-char-img';
-                img.src = cell.maskedSrc;
-                img.alt = 'Character with a part hidden';
-                wrap.appendChild(img);
+                if (cell.exerciseKind === 'svg' && cell.exerciseSvg) {
+                    const holder = document.createElement('div');
+                    holder.className = 'radical-char-svg-wrap';
+                    holder.appendChild(cell.exerciseSvg);
+                    wrap.appendChild(holder);
+                } else if (cell.exerciseKind === 'canvas' && cell.canvasSrc) {
+                    const img = document.createElement('img');
+                    img.className = 'radical-char-img';
+                    img.src = cell.canvasSrc;
+                    img.alt = 'Character with a part hidden';
+                    wrap.appendChild(img);
+                }
             } else {
-                const glyph = document.createElement('div');
-                glyph.className = 'radical-char-full';
-                glyph.textContent = cell.char;
-                wrap.appendChild(glyph);
+                if (cell.exerciseKind === 'svg' && cell.answerSvg) {
+                    const holder = document.createElement('div');
+                    holder.className = 'radical-char-svg-wrap';
+                    holder.appendChild(cell.answerSvg);
+                    wrap.appendChild(holder);
+                } else if (cell.answerCanvasSrc) {
+                    const img = document.createElement('img');
+                    img.className = 'radical-char-img';
+                    img.src = cell.answerCanvasSrc;
+                    img.alt = cell.char;
+                    wrap.appendChild(img);
+                } else {
+                    const glyph = document.createElement('div');
+                    glyph.className = 'radical-char-full';
+                    glyph.textContent = cell.char;
+                    wrap.appendChild(glyph);
+                }
             }
 
             const py = document.createElement('div');
@@ -266,7 +448,13 @@
         printRoot.classList.toggle('print-no-answers', !show);
     }
 
-    function runBuild() {
+    function hideModeLabel(mode) {
+        if (mode === 'radical') return 'radical';
+        if (mode === 'single') return 'single stroke';
+        return 'multiple strokes';
+    }
+
+    async function runBuild() {
         hideWarning();
         const cards = parseCards(wordInput.value);
         if (cards.length === 0) {
@@ -289,8 +477,11 @@
         const pinyinList = buildPinyinList(cards, chars);
         const hasQuestion = pinyinList.some((p) => p === '?');
         const noLib = !getPinyinFn();
+        const warnParts = [];
         if (hasQuestion && noLib) {
-            showWarning('Some syllables are unknown. Load pinyin-pro (network) or use space-separated pinyin matching each character in every word.');
+            warnParts.push(
+                'Some syllables are unknown. Load pinyin-pro (network) or use space-separated pinyin matching each character in every word.'
+            );
         }
 
         const seedStr = seedInput.value.trim();
@@ -312,17 +503,61 @@
         const cols = Math.min(12, Math.max(2, parseInt(colsInput.value, 10) || 6));
         colsInput.value = String(cols);
 
-        const cells = buildCells(chars, pinyinList, rng);
-        renderGrid(gridExercise, cells, cols, 'exercise');
-        renderGrid(gridAnswers, cells, cols, 'answers');
+        let mode = hideModeSelect ? hideModeSelect.value : 'radical';
+        if (mode !== 'radical' && mode !== 'single' && mode !== 'multiple') {
+            mode = 'radical';
+            if (hideModeSelect) hideModeSelect.value = 'radical';
+        }
 
-        statsEl.textContent = `${cells.length} characters · seed ${seedStr || '(time-based)'}`;
-        updateAnswerSheetVisibility();
-    }
+        setLoading(true);
+        buildBtn.disabled = true;
 
-    function printSheet() {
+        const canScale =
+            typeof HanziWriter !== 'undefined' && typeof HanziWriter.getScalingTransform === 'function';
+
+        try {
+            const dataMap = canScale ? await loadCharDataMap(chars) : new Map();
+
+            if (!canScale) {
+                warnParts.push(
+                    'Hanzi Writer did not load; using the simple font mask for every character (stroke layout needs the library script).'
+                );
+            }
+
+            const { cells, strokeDataFallback, radicalListFallback } = buildCells(
+                chars,
+                pinyinList,
+                rng,
+                mode,
+                dataMap,
+                canScale
+            );
+
+            if (strokeDataFallback > 0) {
+                warnParts.push(
+                    `${strokeDataFallback} character instance(s) use the simple mask (missing stroke JSON, blocked network, or Hanzi Writer script needed for layout).`
+                );
+            }
+            if (mode === 'radical' && radicalListFallback > 0) {
+                warnParts.push(
+                    `${radicalListFallback} character instance(s) have no radical stroke list; a random single stroke was hidden instead.`
+                );
+            }
+
+            if (warnParts.length) {
+                showWarning(warnParts.join(' '));
+            }
+
+            renderGrid(gridExercise, cells, cols, 'exercise');
+            renderGrid(gridAnswers, cells, cols, 'answers');
+
+            statsEl.textContent = `${cells.length} characters · hide: ${hideModeLabel(mode)} · seed ${seedStr || '(time-based)'}`;
+        } finally {
+            setLoading(false);
+            buildBtn.disabled = false;
+        }
+
         updateAnswerSheetVisibility();
-        window.print();
     }
 
     function exportRadicalsCsv() {
@@ -351,37 +586,40 @@
         } catch (_) {}
     }
 
-    buildBtn.addEventListener('click', () => {
+    buildBtn.addEventListener('click', async function () {
         try {
             localStorage.setItem(STORAGE_KEY, wordInput.value);
         } catch (_) {}
-        runBuild();
-    });
-
-    printBtn.addEventListener('click', () => {
-        runBuild();
-        printSheet();
+        await runBuild();
     });
 
     exportBtn.addEventListener('click', exportRadicalsCsv);
 
     importBtn.addEventListener('click', () => fileInput.click());
-    fileInput.addEventListener('change', (e) => {
+    fileInput.addEventListener('change', async function (e) {
         const file = e.target.files && e.target.files[0];
         if (!file) return;
         const reader = new FileReader();
-        reader.onload = function () {
+        reader.onload = async function () {
             wordInput.value = String(reader.result || '');
             try {
                 localStorage.setItem(STORAGE_KEY, wordInput.value);
             } catch (_) {}
-            runBuild();
+            await runBuild();
         };
         reader.readAsText(file);
         e.target.value = '';
     });
 
     answerKeyCheck.addEventListener('change', updateAnswerSheetVisibility);
+
+    if (hideModeSelect) {
+        hideModeSelect.addEventListener('change', async function () {
+            if (wordInput.value.trim()) {
+                await runBuild();
+            }
+        });
+    }
 
     updateAnswerSheetVisibility();
     restoreInput();

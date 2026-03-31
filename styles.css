@@ -370,12 +370,22 @@ input[type="text"] {
 }
 
 .radical-options .field input[type="number"],
-.radical-options .field input[type="text"] {
+.radical-options .field input[type="text"],
+.radical-options .field select {
     width: 8rem;
     padding: 8px 10px;
     border: 1px solid #ddd;
     border-radius: 5px;
     font-size: 14px;
+}
+
+.radical-options .field--grow select {
+    width: min(100%, 22rem);
+    max-width: 100%;
+}
+
+.radical-hide-help {
+    margin-top: 8px;
 }
 
 .btn-primary {
@@ -423,6 +433,21 @@ input[type="text"] {
 .radical-char-img {
     width: 72px;
     height: 72px;
+}
+
+.radical-char-svg-wrap {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 72px;
+    height: 72px;
+    overflow: visible;
+}
+
+.radical-char-svg-wrap svg {
+    display: block;
+    flex-shrink: 0;
+    overflow: visible;
 }
 
 .radical-char-full {
@@ -491,6 +516,16 @@ input[type="text"] {
     body.radicals-page .radical-char-img {
         width: 64px;
         height: 64px;
+    }
+
+    body.radicals-page .radical-char-svg-wrap {
+        width: 64px;
+        height: 64px;
+    }
+
+    body.radicals-page .radical-char-svg-wrap svg {
+        width: 64px !important;
+        height: 64px !important;
     }
 }
 
