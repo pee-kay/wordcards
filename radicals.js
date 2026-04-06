@@ -1,6 +1,10 @@
 (function () {
     'use strict';
 
+    function t(key, vars) {
+        return window.I18N && I18N.t ? I18N.t(key, vars) : key;
+    }
+
     const STORAGE_KEY = 'wordCardsRadicalsInput';
     /** Same dataset as Hanzi Writer; load via fetch to avoid broken parallel loads on HanziWriter.loadCharacterData (singleton LoadingManager). */
     const HANZI_WRITER_DATA_BASE = 'https://cdn.jsdelivr.net/npm/hanzi-writer-data@2.0';
@@ -12,7 +16,6 @@
 
     const wordInput = document.getElementById('radicalWordInput');
     const colsInput = document.getElementById('radicalCols');
-    const seedInput = document.getElementById('radicalSeed');
     const hideModeSelect = document.getElementById('radicalHideMode');
     const shuffleCheck = document.getElementById('radicalShuffle');
     const answerKeyCheck = document.getElementById('radicalAnswerKey');
@@ -142,15 +145,6 @@
             t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
             return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
         };
-    }
-
-    function hashSeed(str) {
-        let h = 2166136261;
-        for (let i = 0; i < str.length; i++) {
-            h ^= str.charCodeAt(i);
-            h = Math.imul(h, 16777619);
-        }
-        return h >>> 0;
     }
 
     function shuffleInPlace(arr, rng) {
@@ -411,7 +405,7 @@
                     const img = document.createElement('img');
                     img.className = 'radical-char-img';
                     img.src = cell.canvasSrc;
-                    img.alt = 'Character with a part hidden';
+                    img.alt = t('radicals.imgAlt');
                     wrap.appendChild(img);
                 }
             } else {
@@ -449,17 +443,17 @@
     }
 
     function hideModeLabel(mode) {
-        if (mode === 'radical') return 'radical';
-        if (mode === 'single') return 'single stroke';
-        return 'multiple strokes';
+        if (mode === 'radical') return t('radicals.hide.radical');
+        if (mode === 'single') return t('radicals.hide.single');
+        return t('radicals.hide.multiple');
     }
 
     async function runBuild() {
         hideWarning();
         const cards = parseCards(wordInput.value);
         if (cards.length === 0) {
-            showWarning('Add at least one non-empty line (single column, or word,pronunciation[,meaning]).');
-            statsEl.textContent = 'No characters yet';
+            showWarning(t('radicals.warnEmpty'));
+            statsEl.textContent = t('radicals.statsNone');
             gridExercise.innerHTML = '';
             gridAnswers.innerHTML = '';
             return;
@@ -467,8 +461,8 @@
 
         let chars = extractHanziSequence(cards);
         if (chars.length === 0) {
-            showWarning('No Chinese characters found in the word column.');
-            statsEl.textContent = 'No Chinese characters';
+            showWarning(t('radicals.warnNoHanzi'));
+            statsEl.textContent = t('radicals.statsNoHanzi');
             gridExercise.innerHTML = '';
             gridAnswers.innerHTML = '';
             return;
@@ -479,14 +473,10 @@
         const noLib = !getPinyinFn();
         const warnParts = [];
         if (hasQuestion && noLib) {
-            warnParts.push(
-                'Some syllables are unknown. Load pinyin-pro (network) or use space-separated pinyin matching each character in every word.'
-            );
+            warnParts.push(t('radicals.warnPinyin'));
         }
 
-        const seedStr = seedInput.value.trim();
-        const seedNum = seedStr === '' ? Date.now() : hashSeed(seedStr);
-        const rng = mulberry32(seedNum);
+        const rng = mulberry32(Date.now());
 
         const charsCopy = chars.slice();
         const pyCopy = pinyinList.slice();
@@ -519,9 +509,7 @@
             const dataMap = canScale ? await loadCharDataMap(chars) : new Map();
 
             if (!canScale) {
-                warnParts.push(
-                    'Hanzi Writer did not load; using the simple font mask for every character (stroke layout needs the library script).'
-                );
+                warnParts.push(t('radicals.warnNoHw'));
             }
 
             const { cells, strokeDataFallback, radicalListFallback } = buildCells(
@@ -534,14 +522,10 @@
             );
 
             if (strokeDataFallback > 0) {
-                warnParts.push(
-                    `${strokeDataFallback} character instance(s) use the simple mask (missing stroke JSON, blocked network, or Hanzi Writer script needed for layout).`
-                );
+                warnParts.push(t('radicals.warnStrokeFallback', { n: strokeDataFallback }));
             }
             if (mode === 'radical' && radicalListFallback > 0) {
-                warnParts.push(
-                    `${radicalListFallback} character instance(s) have no radical stroke list; a random single stroke was hidden instead.`
-                );
+                warnParts.push(t('radicals.warnRadicalFallback', { n: radicalListFallback }));
             }
 
             if (warnParts.length) {
@@ -551,7 +535,10 @@
             renderGrid(gridExercise, cells, cols, 'exercise');
             renderGrid(gridAnswers, cells, cols, 'answers');
 
-            statsEl.textContent = `${cells.length} characters · hide: ${hideModeLabel(mode)} · seed ${seedStr || '(time-based)'}`;
+            statsEl.textContent = t('radicals.statsLine', {
+                count: cells.length,
+                hide: hideModeLabel(mode)
+            });
         } finally {
             setLoading(false);
             buildBtn.disabled = false;
@@ -563,7 +550,7 @@
     function exportRadicalsCsv() {
         const raw = wordInput.value;
         if (!raw.trim()) {
-            alert('Nothing to export.');
+            alert(t('radicals.exportEmpty'));
             return;
         }
         const blob = new Blob(['\ufeff' + raw], {
@@ -620,6 +607,17 @@
             }
         });
     }
+
+    document.addEventListener('wordcards:locale-changed', async function () {
+        if (window.I18N) {
+            I18N.applyStaticTranslations();
+        }
+        if (wordInput.value.trim()) {
+            await runBuild();
+        } else {
+            statsEl.textContent = t('radicals.statsNone');
+        }
+    });
 
     updateAnswerSheetVisibility();
     restoreInput();

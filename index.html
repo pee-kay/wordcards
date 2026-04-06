@@ -3,43 +3,50 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Word Cards</title>
+    <title data-i18n="index.documentTitle">Word Cards</title>
     <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-    <div class="container">
-        <nav class="site-nav site-nav--compact" aria-label="Site">
-            <a href="index.html" aria-current="page">Word cards</a>
-            <a href="radicals.html">Missing strokes / radicals</a>
-            <a href="strokes.html">Stroke order</a>
-        </nav>
-        <h1>Word Cards</h1>
-        
+    <div class="container container--wide">
+        <header class="page-header">
+            <div class="lang-switch" role="group" data-i18n-aria-label="lang.label" aria-label="Language">
+                <button type="button" class="lang-btn" data-set-lang="en" aria-pressed="false" data-i18n="lang.en">EN</button>
+                <button type="button" class="lang-btn" data-set-lang="ru" aria-pressed="false" data-i18n="lang.ru">RU</button>
+            </div>
+            <h1 data-i18n="index.h1">Word Cards</h1>
+            <p class="subtitle" data-i18n="index.subtitle">Study vocabulary with flashcards, quizzes, and a simple CSV editor.</p>
+            <nav class="site-nav" data-i18n-aria-label="nav.aria" aria-label="Site">
+                <a href="index.html" aria-current="page" data-i18n="nav.wordCards">Word cards</a>
+                <a href="radicals.html" data-i18n="nav.radicals">Missing strokes / radicals</a>
+                <a href="strokes.html" data-i18n="nav.strokes">Stroke order</a>
+            </nav>
+        </header>
+
         <div class="section">
-            <h2>Select Mode</h2>
+            <h2 data-i18n="index.selectMode">Select Mode</h2>
             <div class="mode-selector">
-                <button class="mode-btn" data-mode="flashcard">Flashcards</button>
-                <button class="mode-btn" data-mode="multipleChoice">Multiple Choice</button>
-                <button class="mode-btn" data-mode="pronunciation">Pronunciation</button>
-                <button class="mode-btn" data-mode="writing">Writing</button>
-                <button class="mode-btn" data-mode="editor">Editor</button>
+                <button class="mode-btn" data-mode="flashcard" data-i18n="mode.flashcard">Flashcards</button>
+                <button class="mode-btn" data-mode="multipleChoice" data-i18n="mode.multipleChoice">Multiple Choice</button>
+                <button class="mode-btn" data-mode="pronunciation" data-i18n="mode.pronunciation">Pronunciation</button>
+                <button class="mode-btn" data-mode="writing" data-i18n="mode.writing">Writing</button>
+                <button class="mode-btn" data-mode="editor" data-i18n="mode.editor">Editor</button>
             </div>
         </div>
         
         <div class="section">
             <!-- Editor Mode -->
             <div id="editorMode" class="mode-content">
-                <h2>Card Editor</h2>
-                <p>Enter cards in CSV format: word,pronunciation,meaning (one per line)</p>
-                <textarea id="wordInput" placeholder="Example:
+                <h2 data-i18n="index.editorTitle">Card Editor</h2>
+                <p data-i18n="index.editorHelp">Enter cards in CSV format: word,pronunciation,meaning (one per line)</p>
+                <textarea id="wordInput" data-i18n-placeholder="index.wordInputPlaceholder" placeholder="Example:
 谢谢,xièxie,thank you
 再见,zàijiàn,goodbye
 你好,nǐhǎo,hello"></textarea>
                 <div class="button-group">
-                    <button id="updateCards">Update</button>
-                    <button id="exportCards">Export</button>
-                    <button id="importCards">Import</button>
-                    <button id="clearCards">Clear</button>
+                    <button id="updateCards" data-i18n="index.update">Update</button>
+                    <button id="exportCards" data-i18n="index.export">Export</button>
+                    <button id="importCards" data-i18n="index.import">Import</button>
+                    <button id="clearCards" data-i18n="index.clear">Clear</button>
                 </div>
                 <div id="cardCount" class="stats">No cards loaded</div>
                 <div id="editorWarning" class="warning hidden"></div>
@@ -47,30 +54,30 @@
             
             <!-- Flashcard Mode -->
             <div id="flashcardMode" class="mode-content hidden">
-                <h2>Flashcard Mode</h2>
+                <h2 data-i18n="flashcard.title">Flashcard Mode</h2>
                 <div class="card-container">
                     <div class="card" id="flashcard">
                         <div class="card-face card-front">
-                            <div class="word" id="cardWord">Word</div>
+                            <div class="word" id="cardWord" data-i18n="flashcard.word">Word</div>
                         </div>
                         <div class="card-face card-back">
-                            <div class="pronunciation" id="cardPronunciation">Pronunciation</div>
-                            <div class="meaning" id="cardMeaning">Meaning</div>
+                            <div class="pronunciation" id="cardPronunciation" data-i18n="flashcard.pronunciation">Pronunciation</div>
+                            <div class="meaning" id="cardMeaning" data-i18n="flashcard.meaning">Meaning</div>
                         </div>
                     </div>
                 </div>
                 <div class="flashcard-controls">
                     <label class="checkbox-label">
                         <input type="checkbox" id="randomizeCards">
-                        Randomize order
+                        <span data-i18n="flashcard.randomize">Randomize order</span>
                     </label>
                 </div>
                 <div class="navigation">
-                    <button id="firstCard">First</button>
-                    <button id="prevCard">Previous</button>
-                    <button id="flipCard">Flip Card</button>
-                    <button id="nextCard">Next</button>
-                    <button id="lastCard">Last</button>
+                    <button id="firstCard" data-i18n="flashcard.first">First</button>
+                    <button id="prevCard" data-i18n="flashcard.prev">Previous</button>
+                    <button id="flipCard" data-i18n="flashcard.flip">Flip Card</button>
+                    <button id="nextCard" data-i18n="flashcard.next">Next</button>
+                    <button id="lastCard" data-i18n="flashcard.last">Last</button>
                 </div>
                 <div class="stats">
                     <span id="cardPosition">Card 0 of 0</span>
@@ -79,42 +86,42 @@
             
             <!-- Multiple Choice Mode -->
             <div id="multipleChoiceMode" class="mode-content hidden">
-                <h2>Multiple Choice Mode</h2>
+                <h2 data-i18n="mc.title">Multiple Choice Mode</h2>
                 <div class="quiz-container">
                     <div class="question" id="mcQuestion">Question</div>
                     <div class="options" id="mcOptions">
                         <!-- Options will be generated here -->
                     </div>
                     <div class="feedback" id="mcFeedback"></div>
-                    <button id="mcNext">Next Question</button>
+                    <button id="mcNext" data-i18n="mc.next">Next Question</button>
                 </div>
             </div>
             
             <!-- Pronunciation Mode -->
             <div id="pronunciationMode" class="mode-content hidden">
-                <h2>Pronunciation Mode</h2>
+                <h2 data-i18n="wp.title">Pronunciation Mode</h2>
                 <div class="quiz-container">
                     <div class="question" id="wpQuestion">Question</div>
                     <div class="input-container">
-                        <input type="text" id="wpAnswer" placeholder="Enter pronunciation">
-                        <button id="wpSubmit">Check Answer</button>
+                        <input type="text" id="wpAnswer" data-i18n-placeholder="wp.placeholder" placeholder="Enter pronunciation">
+                        <button id="wpSubmit" data-i18n="wp.check">Check Answer</button>
                     </div>
                     <div class="feedback" id="wpFeedback"></div>
-                    <button id="wpNext">Next Word</button>
+                    <button id="wpNext" data-i18n="wp.next">Next Word</button>
                 </div>
             </div>
             
             <!-- Writing/Spelling Mode -->
             <div id="writingMode" class="mode-content hidden">
-                <h2>Writing/Spelling Mode</h2>
+                <h2 data-i18n="ws.title">Writing/Spelling Mode</h2>
                 <div class="quiz-container">
                     <div class="question" id="wsQuestion">Question</div>
                     <div class="input-container">
-                        <input type="text" id="wsAnswer" placeholder="Write the word">
-                        <button id="wsSubmit">Check Answer</button>
+                        <input type="text" id="wsAnswer" data-i18n-placeholder="ws.placeholder" placeholder="Write the word">
+                        <button id="wsSubmit" data-i18n="ws.check">Check Answer</button>
                     </div>
                     <div class="feedback" id="wsFeedback"></div>
-                    <button id="wsNext">Next Word</button>
+                    <button id="wsNext" data-i18n="ws.next">Next Word</button>
                 </div>
             </div>
         </div>
@@ -123,6 +130,7 @@
     <!-- Hidden file input for importing -->
     <input type="file" id="fileInput" accept=".csv,.txt" style="display: none;">
 
+    <script src="i18n.js"></script>
     <script src="script.js"></script>
 </body>
 </html>

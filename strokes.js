@@ -1,6 +1,10 @@
 (function () {
     'use strict';
 
+    function t(key, vars) {
+        return window.I18N && I18N.t ? I18N.t(key, vars) : key;
+    }
+
     const STORAGE_KEY = 'wordCardsStrokesInput';
     const HANZI_WRITER_DATA_BASE = 'https://cdn.jsdelivr.net/npm/hanzi-writer-data@2.0';
 
@@ -181,22 +185,22 @@
         printRoot.innerHTML = '';
 
         if (typeof HanziWriter === 'undefined' || typeof HanziWriter.getScalingTransform !== 'function') {
-            showWarning('Hanzi Writer failed to load. Check your network and refresh.');
-            statsEl.textContent = 'Hanzi Writer unavailable';
+            showWarning(t('strokes.warnNoHw'));
+            statsEl.textContent = t('strokes.statsUnavailable');
             return;
         }
 
         const cards = parseCards(wordInput.value);
         if (cards.length === 0) {
-            showWarning('Add at least one non-empty line (single column, or word,pronunciation[,meaning]).');
-            statsEl.textContent = 'No characters yet';
+            showWarning(t('strokes.warnEmpty'));
+            statsEl.textContent = t('strokes.statsNone');
             return;
         }
 
         const chars = extractHanziSequence(cards);
         if (chars.length === 0) {
-            showWarning('No Chinese characters found in the word column.');
-            statsEl.textContent = 'No Chinese characters';
+            showWarning(t('strokes.warnNoHanzi'));
+            statsEl.textContent = t('strokes.statsNoHanzi');
             return;
         }
 
@@ -205,9 +209,7 @@
         const noLib = !getPinyinFn();
         const warnParts = [];
         if (hasQuestion && noLib) {
-            warnParts.push(
-                'Some syllables are unknown. Load pinyin-pro (network) or use space-separated pinyin matching each character in every word.'
-            );
+            warnParts.push(t('strokes.warnPinyin'));
         }
 
         const stepsPerRow = Math.min(24, Math.max(4, parseInt(stepsPerRowInput.value, 10) || 8));
@@ -244,9 +246,14 @@
         }
 
         if (failed.length > 0) {
-            const sample = [...new Set(failed)].slice(0, 8).join(' ');
+            const failedUnique = [...new Set(failed)];
+            const sample = failedUnique.slice(0, 8).join(' ');
             warnParts.push(
-                `No stroke data for ${failed.length} unique character(s): ${sample}${failed.length > 8 ? ' …' : ''}. They are skipped below.`
+                t('strokes.warnFailed', {
+                    n: failedUnique.length,
+                    sample: sample,
+                    more: failedUnique.length > 8 ? t('strokes.warnMore') : ''
+                })
             );
         }
         if (warnParts.length) {
@@ -278,7 +285,7 @@
             if (!charData || !charData.strokes.length) {
                 const miss = document.createElement('div');
                 miss.className = 'stroke-char-missing';
-                miss.textContent = 'Stroke data not available for this character.';
+                miss.textContent = t('strokes.missingData');
                 block.appendChild(miss);
                 frag.appendChild(block);
                 return;
@@ -321,13 +328,17 @@
             return d && d.strokes && d.strokes.length > 0;
         }).length;
 
-        statsEl.textContent = `${okChars} of ${chars.length} characters rendered · ${totalSteps} stroke steps total`;
+        statsEl.textContent = t('strokes.statsLine', {
+            ok: okChars,
+            total: chars.length,
+            steps: totalSteps
+        });
     }
 
     function exportCsv() {
         const raw = wordInput.value;
         if (!raw.trim()) {
-            alert('Nothing to export.');
+            alert(t('strokes.exportEmpty'));
             return;
         }
         const blob = new Blob(['\ufeff' + raw], { type: 'text/csv;charset=utf-8' });
@@ -371,6 +382,17 @@
         };
         reader.readAsText(file);
         e.target.value = '';
+    });
+
+    document.addEventListener('wordcards:locale-changed', async function () {
+        if (window.I18N) {
+            I18N.applyStaticTranslations();
+        }
+        if (wordInput.value.trim()) {
+            await runBuild();
+        } else {
+            statsEl.textContent = t('strokes.statsNone');
+        }
     });
 
     restoreInput();

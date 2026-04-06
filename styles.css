@@ -316,13 +316,45 @@ input[type="text"] {
     font-weight: 600;
 }
 
-.site-nav--compact {
-    margin-bottom: 12px;
+.lang-switch {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 14px;
+}
+
+.page-header .lang-switch {
+    justify-content: center;
+}
+
+.lang-btn {
+    padding: 6px 14px;
+    font-size: 13px;
+    border: 1px solid #cfd8dc;
+    background: #fff;
+    border-radius: 5px;
+    cursor: pointer;
+    color: #333;
+}
+
+.lang-btn:hover {
+    background: #eef2f5;
+}
+
+.lang-btn.active {
+    background: #3498db;
+    color: #fff;
+    border-color: #3498db;
 }
 
 /* Radicals page */
 .container--wide {
     max-width: 960px;
+}
+
+.page-header h1 {
+    margin-bottom: 10px;
 }
 
 .page-header .subtitle {

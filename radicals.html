@@ -3,82 +3,79 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Character & radical practice</title>
+    <title data-i18n="radicals.documentTitle">Missing strokes / radicals practice</title>
     <link rel="stylesheet" href="styles.css">
 </head>
 <body class="radicals-page">
     <div class="container container--wide">
         <header class="page-header no-print">
-            <h1>Missing strokes / radicals practice</h1>
-            <p class="subtitle">Build a printable grid from your word list. Each cell shows a character with chosen strokes hidden (from <a href="https://hanziwriter.org/" rel="noopener noreferrer">Hanzi Writer</a> stroke data) and its pinyin.</p>
-            <nav class="site-nav">
-                <a href="index.html">Word cards</a>
-                <a href="radicals.html" aria-current="page">Missing strokes / radicals</a>
-                <a href="strokes.html">Stroke order</a>
+            <div class="lang-switch" role="group" data-i18n-aria-label="lang.label" aria-label="Language">
+                <button type="button" class="lang-btn" data-set-lang="en" aria-pressed="false" data-i18n="lang.en">EN</button>
+                <button type="button" class="lang-btn" data-set-lang="ru" aria-pressed="false" data-i18n="lang.ru">RU</button>
+            </div>
+            <h1 data-i18n="radicals.h1">Missing strokes / radicals practice</h1>
+            <p class="subtitle" data-i18n-html="radicals.subtitle">Build a printable grid from your word list. Each cell shows a character with chosen strokes hidden (from <a href="https://hanziwriter.org/" rel="noopener noreferrer">Hanzi Writer</a> stroke data) and its pinyin.</p>
+            <nav class="site-nav" data-i18n-aria-label="nav.aria" aria-label="Site">
+                <a href="index.html" data-i18n="nav.wordCards">Word cards</a>
+                <a href="radicals.html" aria-current="page" data-i18n="nav.radicals">Missing strokes / radicals</a>
+                <a href="strokes.html" data-i18n="nav.strokes">Stroke order</a>
             </nav>
         </header>
 
         <div class="section">
-            <h2>Word list</h2>
-            <p class="help">Word Cards style: <code>word,pronunciation,meaning</code> per line; or <code>word,pronunciation</code>; or a <strong>single column</strong> (one entry per line—character or word). Missing pinyin is filled with <a href="https://github.com/zh-lx/pinyin-pro" rel="noopener noreferrer">pinyin-pro</a> when the script loads (needs network). You can also use <strong>space-separated</strong> syllables in the pronunciation field to match the Chinese characters in each word.</p>
-            <textarea id="radicalWordInput" placeholder="谢
-谢
-好
-或: 谢谢,xiè xie,thank you"></textarea>
+            <h2 data-i18n="radicals.wordList">Word list</h2>
+            <p class="help" data-i18n-html="radicals.wordListHelp">Word Cards style help.</p>
+            <textarea id="radicalWordInput" data-i18n-placeholder="radicals.wordInputPlaceholder" placeholder="谢"></textarea>
             <div class="button-group">
-                <button type="button" id="radicalExport">Export CSV</button>
-                <button type="button" id="radicalImport">Import CSV</button>
+                <button type="button" id="radicalExport" data-i18n="radicals.export">Export CSV</button>
+                <button type="button" id="radicalImport" data-i18n="radicals.import">Import CSV</button>
             </div>
             <input type="file" id="radicalFileInput" accept=".csv,.txt" class="hidden-file-input" aria-hidden="true">
         </div>
 
         <div class="section">
-            <h2>Grid & PDF</h2>
+            <h2 data-i18n="radicals.gridSection">Grid & PDF</h2>
             <div class="radical-options">
                 <label class="field field--grow">
-                    <span>What to hide</span>
+                    <span data-i18n="radicals.whatToHide">What to hide</span>
                     <select id="radicalHideMode" aria-describedby="radicalHideModeHelp">
-                        <option value="radical">Radical (all strokes marked as radical in the dataset)</option>
-                        <option value="single">Single stroke (random)</option>
-                        <option value="multiple">Multiple strokes (random, 2–5 or fewer if needed)</option>
+                        <option value="radical" data-i18n="radicals.optRadical">Radical</option>
+                        <option value="single" data-i18n="radicals.optSingle">Single stroke</option>
+                        <option value="multiple" data-i18n="radicals.optMultiple">Multiple strokes</option>
                     </select>
                 </label>
                 <label class="field">
-                    <span>Columns</span>
+                    <span data-i18n="radicals.columns">Columns</span>
                     <input type="number" id="radicalCols" min="2" max="12" value="6">
-                </label>
-                <label class="field">
-                    <span>Random seed</span>
-                    <input type="text" id="radicalSeed" placeholder="empty = random each time" inputmode="numeric" autocomplete="off">
                 </label>
                 <label class="checkbox-label">
                     <input type="checkbox" id="radicalShuffle">
-                    Shuffle character order
+                    <span data-i18n="radicals.shuffle">Shuffle character order</span>
                 </label>
                 <label class="checkbox-label">
                     <input type="checkbox" id="radicalAnswerKey" checked>
-                    Second page: answer key (full characters)
+                    <span data-i18n="radicals.answerKey">Second page: answer key</span>
                 </label>
             </div>
             <div class="button-group">
-                <button type="button" id="radicalBuild" class="btn-primary">Generate</button>
+                <button type="button" id="radicalBuild" class="btn-primary" data-i18n="radicals.generate">Generate</button>
             </div>
             <p id="radicalStats" class="stats">No characters yet</p>
-            <p id="radicalHideModeHelp" class="help radical-hide-help no-print">Radical mode uses <code>radStrokes</code> from the character file. If a character has no radical list, a random single stroke is hidden instead. Changing <strong>What to hide</strong> refreshes the preview automatically.</p>
+            <p id="radicalHideModeHelp" class="help radical-hide-help no-print" data-i18n-html="radicals.hideHelp">Radical mode help.</p>
             <div id="radicalWarning" class="warning hidden" role="alert"></div>
-            <div id="radicalLoading" class="info hidden" role="status">Loading character stroke data…</div>
+            <div id="radicalLoading" class="info hidden" role="status" data-i18n="radicals.loading">Loading…</div>
         </div>
 
         <div class="section" id="radicalPreviewSection">
-            <h2 class="no-print">Preview</h2>
-            <p class="help no-print">Use your browser’s print dialog and choose “Save as PDF”. Landscape often fits more columns. Characters without Hanzi Writer data use a simple font mask instead.</p>
+            <h2 class="no-print" data-i18n="radicals.preview">Preview</h2>
+            <p class="help no-print" data-i18n="radicals.previewHelp">Print help.</p>
             <div id="radicalPrintRoot" class="print-root">
                 <div class="print-sheet print-sheet--exercise">
-                    <h2 class="print-title">Fill in the missing parts — character practice</h2>
+                    <h2 class="print-title" data-i18n="radicals.sheetExercise">Exercise</h2>
                     <div id="radicalGridExercise" class="radical-grid"></div>
                 </div>
                 <div class="print-sheet print-sheet--answers">
-                    <h2 class="print-title">Answer key</h2>
+                    <h2 class="print-title" data-i18n="radicals.sheetAnswers">Answer key</h2>
                     <div id="radicalGridAnswers" class="radical-grid radical-grid--answers"></div>
                 </div>
             </div>
@@ -87,6 +84,7 @@
 
     <script src="https://cdn.jsdelivr.net/npm/hanzi-writer@3.5.0/dist/hanzi-writer.min.js"></script>
     <script src="https://unpkg.com/pinyin-pro@3.26.0/dist/index.js"></script>
+    <script src="i18n.js"></script>
     <script src="radicals.js"></script>
 </body>
 </html>

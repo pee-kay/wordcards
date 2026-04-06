@@ -1,3 +1,7 @@
+function t(key, vars) {
+    return window.I18N && I18N.t ? I18N.t(key, vars) : key;
+}
+
 // Global variables
 let cards = [];
 let currentCardIndex = 0;
@@ -93,9 +97,41 @@ function init() {
     
     // Load cards from localStorage if available
     loadCardsFromStorage();
-    
+    if (cards.length === 0) {
+        cardCount.textContent = t('index.noCards');
+        cardPosition.textContent = t('flashcard.position', { cur: 0, total: 0 });
+    }
+
     // Set initial mode
     setMode('editor');
+
+    document.addEventListener('wordcards:locale-changed', refreshIndexLocale);
+}
+
+function refreshIndexLocale() {
+    if (!window.I18N) return;
+    I18N.applyStaticTranslations();
+    if (cards.length === 0) {
+        cardCount.textContent = t('index.noCards');
+        cardWord.textContent = t('flashcard.word');
+        cardPronunciation.textContent = t('flashcard.pronunciation');
+        cardMeaning.textContent = t('flashcard.meaning');
+        cardPosition.textContent = t('flashcard.position', { cur: 0, total: 0 });
+    } else {
+        cardCount.textContent = t('index.loadedCount', { count: cards.length });
+        updateFlashcard();
+        if (currentMode === 'multipleChoice') nextMultipleChoiceQuestion();
+        else if (currentMode === 'pronunciation') nextPronunciationQuestion();
+        else if (currentMode === 'writing') nextSpellingQuestion();
+    }
+    if (cards.length > 0) {
+        checkForChanges();
+    } else {
+        hideEditorWarning();
+    }
+    if (currentMode !== 'editor' && cards.length === 0) {
+        showEmptyState(currentMode);
+    }
 }
 
 // Load cards from localStorage
@@ -108,7 +144,7 @@ function loadCardsFromStorage() {
             wordInput.value = parsedData.textareaContent || '';
             
             if (cards.length > 0) {
-                cardCount.textContent = `Loaded ${cards.length} cards from previous session`;
+                cardCount.textContent = t('index.loadedSession', { count: cards.length });
                 updateFlashcard();
                 initMultipleChoice();
                 initPronunciation();
@@ -142,7 +178,7 @@ function checkForChanges() {
     ).join('\n');
     
     if (currentText !== currentCardsText) {
-        showEditorWarning('Changes detected. Click "Update Cards" to apply changes.');
+        showEditorWarning(t('index.editorWarning'));
     } else {
         hideEditorWarning();
     }
@@ -161,7 +197,7 @@ function hideEditorWarning() {
 function loadCardsFromTextarea() {
     const input = wordInput.value.trim();
     if (!input) {
-        alert('Please enter some word cards');
+        alert(t('alert.enterCards'));
         return;
     }
     
@@ -180,12 +216,12 @@ function loadCardsFromTextarea() {
     }
     
     if (newCards.length === 0) {
-        alert('No valid cards found. Please check your input format.');
+        alert(t('alert.noValidCards'));
         return;
     }
     
     cards = newCards;
-    cardCount.textContent = `Loaded ${cards.length} cards`;
+    cardCount.textContent = t('index.loadedCount', { count: cards.length });
     currentCardIndex = 0;
     usedRandomIndices.clear();
     updateFlashcard();
@@ -205,7 +241,7 @@ function loadCardsFromTextarea() {
 // Export cards to CSV file
 function exportCards() {
     if (cards.length === 0) {
-        alert('No cards to export');
+        alert(t('alert.nothingExport'));
         return;
     }
     
@@ -248,10 +284,10 @@ function handleFileImport(event) {
 
 // Clear all cards
 function clearCards() {
-    if (confirm('Are you sure you want to clear all cards?')) {
+    if (confirm(t('confirm.clear'))) {
         cards = [];
         wordInput.value = '';
-        cardCount.textContent = 'No cards loaded';
+        cardCount.textContent = t('index.noCards');
         currentCardIndex = 0;
         usedRandomIndices.clear();
         updateFlashcard();
@@ -308,18 +344,21 @@ function showEmptyState(mode) {
     
     const emptyState = document.createElement('div');
     emptyState.className = 'empty-state';
-    emptyState.innerHTML = `
-        <h3>No Cards Available</h3>
-        <p>Please add some word cards in the Editor mode first.</p>
-        <button id="goToEditor" style="margin-top: 15px;">Go to Editor</button>
-    `;
-    
-    modeContent.appendChild(emptyState);
-    
-    // Add event listener to the button
-    document.getElementById('goToEditor').addEventListener('click', () => {
+    const h3 = document.createElement('h3');
+    h3.textContent = t('empty.title');
+    const p = document.createElement('p');
+    p.textContent = t('empty.text');
+    const btn = document.createElement('button');
+    btn.id = 'goToEditor';
+    btn.style.marginTop = '15px';
+    btn.textContent = t('empty.goEditor');
+    btn.addEventListener('click', () => {
         setMode('editor');
     });
+    emptyState.appendChild(h3);
+    emptyState.appendChild(p);
+    emptyState.appendChild(btn);
+    modeContent.appendChild(emptyState);
 }
 
 // Flashcard functions
@@ -338,7 +377,10 @@ function updateFlashcard() {
     flashcard.classList.remove('flipped');
     
     // Update position indicator
-    cardPosition.textContent = `Card ${currentCardIndex + 1} of ${cards.length}`;
+    cardPosition.textContent = t('flashcard.position', {
+        cur: currentCardIndex + 1,
+        total: cards.length
+    });
 }
 
 function showFirstCard() {
@@ -436,9 +478,9 @@ function nextMultipleChoiceQuestion() {
     
     // Create question
     if (questionType === 'meaning') {
-        mcQuestion.textContent = `Which word means "${correctCard.meaning}"?`;
+        mcQuestion.textContent = t('mc.qMeaning', { meaning: correctCard.meaning });
     } else {
-        mcQuestion.textContent = `Which word is pronounced "${correctCard.pronunciation}"?`;
+        mcQuestion.textContent = t('mc.qPron', { pron: correctCard.pronunciation });
     }
     
     // Create options (1 correct, 3 random incorrect)
@@ -485,10 +527,10 @@ function checkMultipleChoiceAnswer(selectedWord, correctWord, button) {
     });
     
     if (isCorrect) {
-        mcFeedback.textContent = 'Correct!';
+        mcFeedback.textContent = t('mc.correct');
         mcFeedback.className = 'feedback correct';
     } else {
-        mcFeedback.textContent = `Incorrect. The correct answer is: ${correctWord}`;
+        mcFeedback.textContent = t('mc.wrong', { word: correctWord });
         mcFeedback.className = 'feedback incorrect';
     }
 }
@@ -517,7 +559,7 @@ function nextPronunciationQuestion() {
     const card = cards[randomIndex];
     
     // Create question
-    wpQuestion.textContent = `How is "${card.word}" pronounced?`;
+    wpQuestion.textContent = t('wp.question', { word: card.word });
     
     currentWPQuestion = { 
         correctPronunciation: card.pronunciation,
@@ -538,10 +580,10 @@ function checkPronunciationAnswer() {
     const isCorrect = normalizedUser === normalizedCorrect;
     
     if (isCorrect) {
-        wpFeedback.textContent = 'Correct!';
+        wpFeedback.textContent = t('wp.correct');
         wpFeedback.className = 'feedback correct';
     } else {
-        wpFeedback.textContent = `Incorrect. The correct pronunciation is: ${currentWPQuestion.correctPronunciation}`;
+        wpFeedback.textContent = t('wp.wrong', { pron: currentWPQuestion.correctPronunciation });
         wpFeedback.className = 'feedback incorrect';
     }
 }
@@ -575,9 +617,9 @@ function nextSpellingQuestion() {
     
     // Create question
     if (questionType === 'meaning') {
-        wsQuestion.textContent = `How do you write the word that means "${card.meaning}"?`;
+        wsQuestion.textContent = t('ws.qMeaning', { meaning: card.meaning });
     } else {
-        wsQuestion.textContent = `How do you write the word pronounced "${card.pronunciation}"?`;
+        wsQuestion.textContent = t('ws.qPron', { pron: card.pronunciation });
     }
     
     currentWSQuestion = { 
@@ -595,10 +637,10 @@ function checkSpellingAnswer() {
     const isCorrect = userAnswer === correctAnswer;
     
     if (isCorrect) {
-        wsFeedback.textContent = 'Correct!';
+        wsFeedback.textContent = t('ws.correct');
         wsFeedback.className = 'feedback correct';
     } else {
-        wsFeedback.textContent = `Incorrect. The correct spelling is: ${correctAnswer}`;
+        wsFeedback.textContent = t('ws.wrong', { word: correctAnswer });
         wsFeedback.className = 'feedback incorrect';
     }
 }
