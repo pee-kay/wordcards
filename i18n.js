@@ -15,6 +15,16 @@
             'nav.radicals': 'Missing strokes / radicals',
             'nav.strokes': 'Stroke order',
 
+            'wordList.presetNone': '— Choose file —',
+            'wordList.presetUnavailable': '(list unavailable)',
+            'wordList.loadFailed': 'Could not load that file.',
+            'wordList.needsServer':
+                'Loading preset CSV files requires a local web server. From the project folder run: python3 -m http.server then open http://127.0.0.1:8000/ in your browser.',
+            'wordList.hide': 'Hide word list',
+            'wordList.show': 'Show word list',
+            'wordList.exportCsv': 'Export CSV',
+            'wordList.importCsv': 'Import CSV',
+
             'index.documentTitle': 'Word Cards',
             'index.h1': 'Word Cards',
             'index.subtitle':
@@ -25,20 +35,16 @@
             'mode.pronunciation': 'Pronunciation',
             'mode.writing': 'Writing',
             'mode.editor': 'Editor',
-            'index.editorTitle': 'Card editor',
-            'index.editorHelp':
-                'Enter cards in CSV format: word,pronunciation,meaning (one per line)',
+            'index.wordList': 'Word list',
+            'index.wordListHelp':
+                'Word Cards style: <code>word,pronunciation,meaning</code> per line (three fields). Missing pinyin or single-column lines are not enough for study modes here—use the full three-part format. After editing, switch to Flashcards or another mode to apply changes. Preset files in <code>csv/</code> match this format.',
             'index.wordInputPlaceholder':
                 'Example:\n谢谢,xièxie,thank you\n再见,zàijiàn,goodbye\n你好,nǐhǎo,hello',
-            'index.update': 'Update',
-            'index.export': 'Export',
-            'index.import': 'Import',
-            'index.clear': 'Clear',
             'index.noCards': 'No cards loaded',
             'index.loadedSession': 'Loaded {count} cards from previous session',
             'index.loadedCount': 'Loaded {count} cards',
             'index.editorWarning':
-                'Changes detected. Click «Update» to apply changes.',
+                'The word list does not match loaded cards. Switch to another mode to apply edits, or fix invalid lines.',
             'flashcard.title': 'Flashcard mode',
             'flashcard.word': 'Word',
             'flashcard.pronunciation': 'Pronunciation',
@@ -73,7 +79,7 @@
             'ws.correct': 'Correct!',
             'ws.wrong': 'Incorrect. The correct spelling is: {word}',
             'empty.title': 'No cards available',
-            'empty.text': 'Please add some word cards in Editor mode first.',
+            'empty.text': 'Add cards in the word list (Editor mode), then switch to this mode.',
             'empty.goEditor': 'Go to editor',
             'alert.enterCards': 'Please enter some word cards',
             'alert.noValidCards': 'No valid cards found. Please check your input format.',
@@ -170,6 +176,16 @@
             'nav.radicals': 'Пропуски черт / ключи',
             'nav.strokes': 'Порядок черт',
 
+            'wordList.presetNone': '— Выберите файл —',
+            'wordList.presetUnavailable': '(список недоступен)',
+            'wordList.loadFailed': 'Не удалось загрузить файл.',
+            'wordList.needsServer':
+                'Чтобы подгружать готовые CSV, откройте сайт через локальный сервер. В папке проекта выполните: python3 -m http.server и откройте в браузере http://127.0.0.1:8000/',
+            'wordList.hide': 'Скрыть список слов',
+            'wordList.show': 'Показать список слов',
+            'wordList.exportCsv': 'Экспорт CSV',
+            'wordList.importCsv': 'Импорт CSV',
+
             'index.documentTitle': 'Карточки слов',
             'index.h1': 'Карточки слов',
             'index.subtitle':
@@ -180,20 +196,16 @@
             'mode.pronunciation': 'Произношение',
             'mode.writing': 'Написание',
             'mode.editor': 'Редактор',
-            'index.editorTitle': 'Редактор карточек',
-            'index.editorHelp':
-                'Введите карточки в формате CSV: слово,пиньинь,перевод (по одной строке)',
+            'index.wordList': 'Список слов',
+            'index.wordListHelp':
+                'Формат карточек: в строке <code>слово,пиньинь,перевод</code> (три поля). Для режимов обучения нужны именно три части через запятую. После правок переключитесь на «Карточки» или другой режим, чтобы применить изменения. Готовые файлы в <code>csv/</code> в этом формате.',
             'index.wordInputPlaceholder':
                 'Пример:\n谢谢,xièxie,спасибо\n再见,zàijiàn,до свидания\n你好,nǐhǎo,здравствуйте',
-            'index.update': 'Обновить',
-            'index.export': 'Экспорт',
-            'index.import': 'Импорт',
-            'index.clear': 'Очистить',
             'index.noCards': 'Карточек нет',
             'index.loadedSession': 'Загружено {count} карточек из прошлой сессии',
             'index.loadedCount': 'Загружено {count} карточек',
             'index.editorWarning':
-                'Есть несохранённые изменения. Нажмите «Обновить», чтобы применить.',
+                'Текст списка не совпадает с загруженными карточками. Переключитесь на другой режим, чтобы применить правки, или исправьте строки.',
             'flashcard.title': 'Режим карточек',
             'flashcard.word': 'Слово',
             'flashcard.pronunciation': 'Произношение',
@@ -228,7 +240,7 @@
             'ws.correct': 'Верно!',
             'ws.wrong': 'Неверно. Правильно: {word}',
             'empty.title': 'Нет карточек',
-            'empty.text': 'Сначала добавьте карточки в режиме «Редактор».',
+            'empty.text': 'Добавьте карточки в списке слов (режим «Редактор»), затем переключитесь сюда.',
             'empty.goEditor': 'К редактору',
             'alert.enterCards': 'Введите карточки',
             'alert.noValidCards': 'Нет подходящих строк. Проверьте формат.',
@@ -335,7 +347,13 @@
 
     function t(key, vars) {
         const loc = getLocale();
-        let s = (STRINGS[loc] && STRINGS[loc][key]) || STRINGS[FALLBACK][key] || key;
+        let s = STRINGS[loc] && STRINGS[loc][key];
+        if (s === undefined) {
+            s = STRINGS[FALLBACK][key];
+        }
+        if (s === undefined) {
+            s = key;
+        }
         if (vars && typeof vars === 'object') {
             Object.keys(vars).forEach(function (k) {
                 s = s.split('{' + k + '}').join(String(vars[k]));
@@ -346,22 +364,22 @@
 
     function applyStaticTranslations() {
         document.querySelectorAll('[data-i18n]').forEach(function (el) {
-            const key = el.getAttribute('data-i18n');
+            const key = (el.getAttribute('data-i18n') || '').trim();
             if (!key) return;
             el.textContent = t(key);
         });
         document.querySelectorAll('[data-i18n-html]').forEach(function (el) {
-            const key = el.getAttribute('data-i18n-html');
+            const key = (el.getAttribute('data-i18n-html') || '').trim();
             if (!key) return;
             el.innerHTML = t(key);
         });
         document.querySelectorAll('[data-i18n-placeholder]').forEach(function (el) {
-            const key = el.getAttribute('data-i18n-placeholder');
+            const key = (el.getAttribute('data-i18n-placeholder') || '').trim();
             if (!key) return;
             el.placeholder = t(key);
         });
         document.querySelectorAll('[data-i18n-aria-label]').forEach(function (el) {
-            const key = el.getAttribute('data-i18n-aria-label');
+            const key = (el.getAttribute('data-i18n-aria-label') || '').trim();
             if (!key) return;
             el.setAttribute('aria-label', t(key));
         });

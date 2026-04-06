@@ -28,12 +28,20 @@
     }
 
     function parseCards(text) {
+        const parseRow =
+            window.WordcardsCsvWordlists && WordcardsCsvWordlists.parseCsvLine
+                ? function (s) {
+                      return WordcardsCsvWordlists.parseCsvLine(s);
+                  }
+                : function (s) {
+                      return s.split(',');
+                  };
         const lines = text.split('\n');
         const cards = [];
         for (const line of lines) {
             const trimmed = line.trim();
             if (!trimmed) continue;
-            const parts = trimmed.split(',');
+            const parts = parseRow(trimmed);
             const word = parts[0].trim();
             if (!word) continue;
 
@@ -341,11 +349,15 @@
             alert(t('strokes.exportEmpty'));
             return;
         }
+        var filename = 'words.csv';
+        if (window.WordcardsCsvWordlists && WordcardsCsvWordlists.getExportFilename) {
+            filename = WordcardsCsvWordlists.getExportFilename();
+        }
         const blob = new Blob(['\ufeff' + raw], { type: 'text/csv;charset=utf-8' });
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = 'strokes-list.csv';
+        a.download = filename;
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);
@@ -375,6 +387,7 @@
         const reader = new FileReader();
         reader.onload = async function () {
             wordInput.value = String(reader.result || '');
+            wordInput.dispatchEvent(new Event('input', { bubbles: true }));
             try {
                 localStorage.setItem(STORAGE_KEY, wordInput.value);
             } catch (_) {}
@@ -394,6 +407,20 @@
             statsEl.textContent = t('strokes.statsNone');
         }
     });
+
+    const strokeWordListWrap = document.getElementById('strokeWordListWrap');
+    const strokeToggleWordList = document.getElementById('strokeToggleWordList');
+    if (wordInput) {
+        wordInput.addEventListener('wordcards:preset-loaded', async function () {
+            try {
+                localStorage.setItem(STORAGE_KEY, wordInput.value);
+            } catch (_) {}
+            await runBuild();
+        });
+    }
+    if (window.WordcardsCsvWordlists) {
+        WordcardsCsvWordlists.initWordListToggle(strokeToggleWordList, strokeWordListWrap);
+    }
 
     restoreInput();
     if (wordInput.value.trim()) {

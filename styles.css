@@ -367,6 +367,24 @@ input[type="text"] {
     margin-right: auto;
 }
 
+.word-list-csv-field {
+    margin-bottom: 12px;
+}
+
+.word-list-csv-field .word-list-csv-select {
+    width: 100%;
+    max-width: 100%;
+    padding: 8px 10px;
+    border: 1px solid #ddd;
+    border-radius: 5px;
+    font-size: 14px;
+    background: #fff;
+}
+
+.word-list-input-wrap {
+    margin-bottom: 12px;
+}
+
 .help code {
     font-size: 0.95em;
     background: #eef2f5;

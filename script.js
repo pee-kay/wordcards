@@ -2,6 +2,44 @@ function t(key, vars) {
     return window.I18N && I18N.t ? I18N.t(key, vars) : key;
 }
 
+function splitCsvRow(line) {
+    if (window.WordcardsCsvWordlists && WordcardsCsvWordlists.parseCsvLine) {
+        return WordcardsCsvWordlists.parseCsvLine(line);
+    }
+    return line.split(',');
+}
+
+function parseAllValidCardsFromText(text) {
+    const out = [];
+    for (const line of text.split('\n')) {
+        const trimmed = line.trim();
+        if (!trimmed) continue;
+        const parts = splitCsvRow(trimmed);
+        if (parts.length >= 3) {
+            out.push({
+                word: parts[0].trim(),
+                pronunciation: parts[1].trim(),
+                meaning: parts.slice(2).join(',').trim()
+            });
+        }
+    }
+    return out;
+}
+
+function cardArraysEqual(a, b) {
+    if (a.length !== b.length) return false;
+    for (let i = 0; i < a.length; i++) {
+        if (
+            a[i].word !== b[i].word ||
+            a[i].pronunciation !== b[i].pronunciation ||
+            a[i].meaning !== b[i].meaning
+        ) {
+            return false;
+        }
+    }
+    return true;
+}
+
 // Global variables
 let cards = [];
 let currentCardIndex = 0;
@@ -12,10 +50,10 @@ const STORAGE_KEY = 'wordCardsData';
 
 // DOM elements
 const wordInput = document.getElementById('wordInput');
-const updateCardsBtn = document.getElementById('updateCards');
+const indexToggleWordList = document.getElementById('indexToggleWordList');
+const indexWordListWrap = document.getElementById('indexWordListWrap');
 const exportCardsBtn = document.getElementById('exportCards');
 const importCardsBtn = document.getElementById('importCards');
-const clearCardsBtn = document.getElementById('clearCards');
 const fileInput = document.getElementById('fileInput');
 const cardCount = document.getElementById('cardCount');
 const editorWarning = document.getElementById('editorWarning');
@@ -65,35 +103,34 @@ function init() {
         });
     });
     
-    // Event listeners for card management
-    updateCardsBtn.addEventListener('click', loadCardsFromTextarea);
-    exportCardsBtn.addEventListener('click', exportCards);
-    importCardsBtn.addEventListener('click', importCards);
-    clearCardsBtn.addEventListener('click', clearCards);
-    fileInput.addEventListener('change', handleFileImport);
+    if (exportCardsBtn) exportCardsBtn.addEventListener('click', exportCards);
+    if (importCardsBtn) importCardsBtn.addEventListener('click', importCards);
+    if (fileInput) fileInput.addEventListener('change', handleFileImport);
+
+    if (wordInput) {
+        wordInput.addEventListener('wordcards:preset-loaded', function () {
+            applyEditorToCards();
+        });
+    }
+    if (window.WordcardsCsvWordlists && indexToggleWordList && indexWordListWrap) {
+        WordcardsCsvWordlists.initWordListToggle(indexToggleWordList, indexWordListWrap);
+    }
     
-    // Event listeners for flashcard navigation
-    firstCardBtn.addEventListener('click', showFirstCard);
-    prevCardBtn.addEventListener('click', showPrevCard);
-    nextCardBtn.addEventListener('click', showNextCard);
-    lastCardBtn.addEventListener('click', showLastCard);
-    flipCardBtn.addEventListener('click', flipCard);
-    flashcard.addEventListener('click', flipCard);
-    randomizeCheckbox.addEventListener('change', toggleRandomize);
+    if (firstCardBtn) firstCardBtn.addEventListener('click', showFirstCard);
+    if (prevCardBtn) prevCardBtn.addEventListener('click', showPrevCard);
+    if (nextCardBtn) nextCardBtn.addEventListener('click', showNextCard);
+    if (lastCardBtn) lastCardBtn.addEventListener('click', showLastCard);
+    if (flipCardBtn) flipCardBtn.addEventListener('click', flipCard);
+    if (flashcard) flashcard.addEventListener('click', flipCard);
+    if (randomizeCheckbox) randomizeCheckbox.addEventListener('change', toggleRandomize);
     
-    // Event listeners for multiple choice mode
-    mcNextBtn.addEventListener('click', nextMultipleChoiceQuestion);
+    if (mcNextBtn) mcNextBtn.addEventListener('click', nextMultipleChoiceQuestion);
+    if (wpSubmitBtn) wpSubmitBtn.addEventListener('click', checkPronunciationAnswer);
+    if (wpNextBtn) wpNextBtn.addEventListener('click', nextPronunciationQuestion);
+    if (wsSubmitBtn) wsSubmitBtn.addEventListener('click', checkSpellingAnswer);
+    if (wsNextBtn) wsNextBtn.addEventListener('click', nextSpellingQuestion);
     
-    // Event listeners for word pronunciation mode
-    wpSubmitBtn.addEventListener('click', checkPronunciationAnswer);
-    wpNextBtn.addEventListener('click', nextPronunciationQuestion);
-    
-    // Event listeners for writing/spelling mode
-    wsSubmitBtn.addEventListener('click', checkSpellingAnswer);
-    wsNextBtn.addEventListener('click', nextSpellingQuestion);
-    
-    // Check for textarea changes
-    wordInput.addEventListener('input', checkForChanges);
+    if (wordInput) wordInput.addEventListener('input', checkForChanges);
     
     // Load cards from localStorage if available
     loadCardsFromStorage();
@@ -165,19 +202,14 @@ function saveCardsToStorage() {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(dataToStore));
 }
 
-// Check if textarea content differs from loaded cards
 function checkForChanges() {
     if (cards.length === 0) {
         hideEditorWarning();
         return;
     }
-    
-    const currentText = wordInput.value.trim();
-    const currentCardsText = cards.map(card => 
-        `${card.word},${card.pronunciation},${card.meaning}`
-    ).join('\n');
-    
-    if (currentText !== currentCardsText) {
+
+    const parsed = parseAllValidCardsFromText(wordInput.value);
+    if (!cardArraysEqual(parsed, cards)) {
         showEditorWarning(t('index.editorWarning'));
     } else {
         hideEditorWarning();
@@ -193,67 +225,86 @@ function hideEditorWarning() {
     editorWarning.classList.add('hidden');
 }
 
-// Load cards from textarea
-function loadCardsFromTextarea() {
+function removeEmptyStatesFromLearningModes() {
+    ['flashcard', 'multipleChoice', 'pronunciation', 'writing'].forEach(function (prefix) {
+        const el = document.getElementById(prefix + 'Mode');
+        if (!el) return;
+        const es = el.querySelector('.empty-state');
+        if (es) es.remove();
+    });
+}
+
+/** Parse textarea into cards; empty input clears cards. Returns false if input is non-empty but has no valid rows. */
+function applyEditorToCards() {
     const input = wordInput.value.trim();
     if (!input) {
-        alert(t('alert.enterCards'));
-        return;
+        cards = [];
+        currentCardIndex = 0;
+        usedRandomIndices.clear();
+        cardCount.textContent = t('index.noCards');
+        mcFeedback.textContent = '';
+        wpFeedback.textContent = '';
+        wsFeedback.textContent = '';
+        saveCardsToStorage();
+        updateFlashcard();
+        initMultipleChoice();
+        initPronunciation();
+        initWriting();
+        hideEditorWarning();
+        return true;
     }
-    
+
     const newCards = [];
     const lines = input.split('\n');
-    
+
     for (const line of lines) {
-        const parts = line.split(',');
+        const trimmed = line.trim();
+        if (!trimmed) continue;
+        const parts = splitCsvRow(trimmed);
         if (parts.length >= 3) {
             newCards.push({
                 word: parts[0].trim(),
                 pronunciation: parts[1].trim(),
-                meaning: parts[2].trim()
+                meaning: parts.slice(2).join(',').trim()
             });
         }
     }
-    
+
     if (newCards.length === 0) {
         alert(t('alert.noValidCards'));
-        return;
+        return false;
     }
-    
+
     cards = newCards;
     cardCount.textContent = t('index.loadedCount', { count: cards.length });
     currentCardIndex = 0;
     usedRandomIndices.clear();
+    removeEmptyStatesFromLearningModes();
     updateFlashcard();
-    
-    // Initialize other modes
     initMultipleChoice();
     initPronunciation();
     initWriting();
-    
-    // Save to localStorage
     saveCardsToStorage();
-    
-    // Hide warning
     hideEditorWarning();
+    return true;
 }
 
-// Export cards to CSV file
 function exportCards() {
-    if (cards.length === 0) {
+    const raw = wordInput.value.trim();
+    if (!raw) {
         alert(t('alert.nothingExport'));
         return;
     }
-    
-    const csvContent = cards.map(card => 
-        `${card.word},${card.pronunciation},${card.meaning}`
-    ).join('\n');
-    
-    const blob = new Blob([csvContent], { type: 'text/csv' });
+
+    var filename = 'words.csv';
+    if (window.WordcardsCsvWordlists && WordcardsCsvWordlists.getExportFilename) {
+        filename = WordcardsCsvWordlists.getExportFilename();
+    }
+    const blob = new Blob(['\ufeff' + raw], { type: 'text/csv;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = 'word-cards.csv';
+    a.download = filename;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
@@ -271,10 +322,11 @@ function handleFileImport(event) {
     if (!file) return;
     
     const reader = new FileReader();
-    reader.onload = function(e) {
+    reader.onload = function (e) {
         const content = e.target.result;
         wordInput.value = content;
-        loadCardsFromTextarea();
+        wordInput.dispatchEvent(new Event('input', { bubbles: true }));
+        applyEditorToCards();
     };
     reader.readAsText(file);
     
@@ -282,31 +334,14 @@ function handleFileImport(event) {
     event.target.value = '';
 }
 
-// Clear all cards
-function clearCards() {
-    if (confirm(t('confirm.clear'))) {
-        cards = [];
-        wordInput.value = '';
-        cardCount.textContent = t('index.noCards');
-        currentCardIndex = 0;
-        usedRandomIndices.clear();
-        updateFlashcard();
-        
-        // Clear localStorage
-        localStorage.removeItem(STORAGE_KEY);
-        
-        // Reset quiz modes
-        mcFeedback.textContent = '';
-        wpFeedback.textContent = '';
-        wsFeedback.textContent = '';
-        
-        // Hide warning
-        hideEditorWarning();
-    }
-}
-
 // Set the current learning mode
 function setMode(mode) {
+    if (currentMode === 'editor' && mode !== 'editor') {
+        if (!applyEditorToCards()) {
+            return;
+        }
+    }
+
     currentMode = mode;
     
     // Update active button

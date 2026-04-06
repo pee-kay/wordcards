@@ -25,10 +25,19 @@
         <div class="section">
             <h2 data-i18n="radicals.wordList">Word list</h2>
             <p class="help" data-i18n-html="radicals.wordListHelp">Word Cards style help.</p>
-            <textarea id="radicalWordInput" data-i18n-placeholder="radicals.wordInputPlaceholder" placeholder="谢"></textarea>
+            <div class="field word-list-csv-field">
+                <select id="radicalCsvPreset" class="word-list-csv-select" data-csv-textarea-id="radicalWordInput">
+                    <option value="">— Choose file —</option>
+                    <option value="0.ключи.csv">0.ключи</option>
+                </select>
+            </div>
+            <div class="word-list-input-wrap" id="radicalWordListWrap">
+                <textarea id="radicalWordInput" data-i18n-placeholder="radicals.wordInputPlaceholder" placeholder="谢"></textarea>
+            </div>
             <div class="button-group">
                 <button type="button" id="radicalExport" data-i18n="radicals.export">Export CSV</button>
                 <button type="button" id="radicalImport" data-i18n="radicals.import">Import CSV</button>
+                <button type="button" id="radicalToggleWordList">Hide word list</button>
             </div>
             <input type="file" id="radicalFileInput" accept=".csv,.txt" class="hidden-file-input" aria-hidden="true">
         </div>
@@ -85,6 +94,7 @@
     <script src="https://cdn.jsdelivr.net/npm/hanzi-writer@3.5.0/dist/hanzi-writer.min.js"></script>
     <script src="https://unpkg.com/pinyin-pro@3.26.0/dist/index.js"></script>
     <script src="i18n.js"></script>
+    <script src="csv-wordlists.js"></script>
     <script src="radicals.js"></script>
 </body>
 </html>

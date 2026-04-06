@@ -36,17 +36,24 @@
         <div class="section">
             <!-- Editor Mode -->
             <div id="editorMode" class="mode-content">
-                <h2 data-i18n="index.editorTitle">Card Editor</h2>
-                <p data-i18n="index.editorHelp">Enter cards in CSV format: word,pronunciation,meaning (one per line)</p>
-                <textarea id="wordInput" data-i18n-placeholder="index.wordInputPlaceholder" placeholder="Example:
+                <h2 data-i18n="index.wordList">Word list</h2>
+                <p class="help" data-i18n-html="index.wordListHelp">Word list formats.</p>
+                <div class="field word-list-csv-field">
+                    <select id="indexCsvPreset" class="word-list-csv-select" data-csv-textarea-id="wordInput">
+                        <option value="">— Choose file —</option>
+                        <option value="0.ключи.csv">0.ключи</option>
+                    </select>
+                </div>
+                <div class="word-list-input-wrap" id="indexWordListWrap">
+                    <textarea id="wordInput" data-i18n-placeholder="index.wordInputPlaceholder" placeholder="Example:
 谢谢,xièxie,thank you
 再见,zàijiàn,goodbye
 你好,nǐhǎo,hello"></textarea>
+                </div>
                 <div class="button-group">
-                    <button id="updateCards" data-i18n="index.update">Update</button>
-                    <button id="exportCards" data-i18n="index.export">Export</button>
-                    <button id="importCards" data-i18n="index.import">Import</button>
-                    <button id="clearCards" data-i18n="index.clear">Clear</button>
+                    <button type="button" id="exportCards" data-i18n="wordList.exportCsv">Export CSV</button>
+                    <button type="button" id="importCards" data-i18n="wordList.importCsv">Import CSV</button>
+                    <button type="button" id="indexToggleWordList">Hide word list</button>
                 </div>
                 <div id="cardCount" class="stats">No cards loaded</div>
                 <div id="editorWarning" class="warning hidden"></div>
@@ -127,10 +134,10 @@
         </div>
     </div>
 
-    <!-- Hidden file input for importing -->
-    <input type="file" id="fileInput" accept=".csv,.txt" style="display: none;">
+    <input type="file" id="fileInput" accept=".csv,.txt" class="hidden-file-input" aria-hidden="true">
 
     <script src="i18n.js"></script>
+    <script src="csv-wordlists.js"></script>
     <script src="script.js"></script>
 </body>
 </html>
