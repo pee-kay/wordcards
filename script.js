@@ -78,6 +78,7 @@ const mcQuestion = document.getElementById('mcQuestion');
 const mcOptions = document.getElementById('mcOptions');
 const mcFeedback = document.getElementById('mcFeedback');
 const mcNextBtn = document.getElementById('mcNext');
+const mcHardMode = document.getElementById('mcHardMode');
 
 // Word pronunciation elements
 const wpQuestion = document.getElementById('wpQuestion');
@@ -125,10 +126,36 @@ function init() {
     if (randomizeCheckbox) randomizeCheckbox.addEventListener('change', toggleRandomize);
     
     if (mcNextBtn) mcNextBtn.addEventListener('click', nextMultipleChoiceQuestion);
+    if (mcHardMode) mcHardMode.addEventListener('change', function () {
+        if (currentMode === 'multipleChoice') nextMultipleChoiceQuestion();
+    });
     if (wpSubmitBtn) wpSubmitBtn.addEventListener('click', checkPronunciationAnswer);
     if (wpNextBtn) wpNextBtn.addEventListener('click', nextPronunciationQuestion);
     if (wsSubmitBtn) wsSubmitBtn.addEventListener('click', checkSpellingAnswer);
     if (wsNextBtn) wsNextBtn.addEventListener('click', nextSpellingQuestion);
+
+    if (wpAnswer) {
+        wpAnswer.addEventListener('keydown', function (e) {
+            if (e.key !== 'Enter') return;
+            e.preventDefault();
+            if (wpFeedback.classList.contains('correct') || wpFeedback.classList.contains('incorrect')) {
+                nextPronunciationQuestion();
+            } else {
+                checkPronunciationAnswer();
+            }
+        });
+    }
+    if (wsAnswer) {
+        wsAnswer.addEventListener('keydown', function (e) {
+            if (e.key !== 'Enter') return;
+            e.preventDefault();
+            if (wsFeedback.classList.contains('correct') || wsFeedback.classList.contains('incorrect')) {
+                nextSpellingQuestion();
+            } else {
+                checkSpellingAnswer();
+            }
+        });
+    }
     
     if (wordInput) wordInput.addEventListener('input', checkForChanges);
     
@@ -336,6 +363,7 @@ function handleFileImport(event) {
 
 // Set the current learning mode
 function setMode(mode) {
+    cancelAutoAdvance();
     if (currentMode === 'editor' && mode !== 'editor') {
         if (!applyEditorToCards()) {
             return;
@@ -492,81 +520,208 @@ function initMultipleChoice() {
     nextMultipleChoiceQuestion();
 }
 
+function pickDistractors(cards, correctCard, field, count, matchLen, excludeNormPron) {
+    var correctVal = correctCard[field];
+    var targetLen = (field === 'word') ? correctVal.length
+                  : (field === 'pronunciation') ? correctVal.replace(/ /g, '').length
+                  : 0;
+
+    var sameLen = [];
+    var diffLen = [];
+    for (var i = 0; i < cards.length; i++) {
+        var c = cards[i];
+        if (c[field] === correctVal) continue;
+        if (excludeNormPron && normalizePinyin(c.pronunciation) === excludeNormPron) continue;
+        if (matchLen && targetLen > 0) {
+            var cLen = (field === 'word') ? c[field].length
+                     : (field === 'pronunciation') ? c[field].replace(/ /g, '').length
+                     : 0;
+            if (cLen === targetLen) { sameLen.push(c); } else { diffLen.push(c); }
+        } else {
+            diffLen.push(c);
+        }
+    }
+    shuffleArray(sameLen);
+    shuffleArray(diffLen);
+
+    var pool = sameLen.concat(diffLen);
+    var result = [];
+    var seen = new Set();
+    seen.add(correctVal);
+    for (var j = 0; j < pool.length && result.length < count; j++) {
+        var v = pool[j][field];
+        if (!seen.has(v)) {
+            seen.add(v);
+            result.push(v);
+        }
+    }
+    return result;
+}
+
+function pickPronDistractors(cards, correctCard, count) {
+    var correctNorm = normalizePinyin(correctCard.pronunciation);
+    var correctSyl = splitPinyinSyllables(correctNorm);
+    var correctBase = correctSyl.map(function (s) { return s.base; }).join('');
+    var targetLen = correctCard.pronunciation.replace(/ /g, '').length;
+
+    var toneTraps = [];
+    var sameLenRegular = [];
+    var diffLenRegular = [];
+    var seenNorm = new Set();
+    seenNorm.add(correctNorm);
+
+    for (var i = 0; i < cards.length; i++) {
+        var c = cards[i];
+        var cNorm = normalizePinyin(c.pronunciation);
+        if (seenNorm.has(cNorm)) continue;
+        seenNorm.add(cNorm);
+
+        var cSyl = splitPinyinSyllables(cNorm);
+        var cBase = cSyl.map(function (s) { return s.base; }).join('');
+        var cLen = c.pronunciation.replace(/ /g, '').length;
+
+        if (cBase === correctBase) {
+            toneTraps.push(c.pronunciation);
+        } else if (cLen === targetLen) {
+            sameLenRegular.push(c.pronunciation);
+        } else {
+            diffLenRegular.push(c.pronunciation);
+        }
+    }
+    shuffleArray(toneTraps);
+    shuffleArray(sameLenRegular);
+    shuffleArray(diffLenRegular);
+
+    var trapCount = Math.min(toneTraps.length, 2);
+    var result = toneTraps.slice(0, trapCount);
+    var pool = sameLenRegular.concat(diffLenRegular);
+    for (var j = 0; j < pool.length && result.length < count; j++) {
+        result.push(pool[j]);
+    }
+    return result;
+}
+
 function nextMultipleChoiceQuestion() {
+    cancelAutoAdvance();
     if (cards.length === 0) {
         showEmptyState('multipleChoice');
         return;
     }
-    
-    // Clear previous feedback and reset state
+
     mcFeedback.textContent = '';
     mcFeedback.className = 'feedback';
     mcAnswered = false;
-    
-    // Randomly select a question type
-    const questionTypes = ['meaning', 'pronunciation'];
-    const questionType = questionTypes[Math.floor(Math.random() * questionTypes.length)];
-    
-    // Select a random card as the correct answer
-    const correctIndex = Math.floor(Math.random() * cards.length);
-    const correctCard = cards[correctIndex];
-    
-    // Create question
+
+    var optionCount = (mcHardMode && mcHardMode.checked) ? 8 : 4;
+
+    var questionTypes = ['meaning', 'pronunciation', 'wordMeaning', 'wordPron'];
+    var questionType = questionTypes[Math.floor(Math.random() * questionTypes.length)];
+
+    var correctIndex = Math.floor(Math.random() * cards.length);
+    var correctCard = cards[correctIndex];
+
+    var questionText, correctValue, optionField, matchLen, acceptableValues, distractors;
+
     if (questionType === 'meaning') {
-        mcQuestion.textContent = t('mc.qMeaning', { meaning: correctCard.meaning });
-    } else {
-        mcQuestion.textContent = t('mc.qPron', { pron: correctCard.pronunciation });
-    }
-    
-    // Create options (1 correct, 3 random incorrect)
-    const options = [correctCard.word];
-    while (options.length < 4) {
-        const randomIndex = Math.floor(Math.random() * cards.length);
-        const randomWord = cards[randomIndex].word;
-        if (!options.includes(randomWord)) {
-            options.push(randomWord);
+        questionText = t('mc.qMeaning', { meaning: correctCard.meaning });
+        correctValue = correctCard.word;
+        optionField = 'word';
+        matchLen = false;
+    } else if (questionType === 'pronunciation') {
+        questionText = t('mc.qPron', { pron: correctCard.pronunciation });
+        correctValue = correctCard.word;
+        optionField = 'word';
+        matchLen = true;
+        var correctNormPron = normalizePinyin(correctCard.pronunciation);
+        acceptableValues = new Set();
+        acceptableValues.add(correctValue);
+        for (var k = 0; k < cards.length; k++) {
+            if (normalizePinyin(cards[k].pronunciation) === correctNormPron) {
+                acceptableValues.add(cards[k].word);
+            }
         }
+    } else if (questionType === 'wordMeaning') {
+        questionText = t('mc.qWordMeaning', { word: correctCard.word });
+        correctValue = correctCard.meaning;
+        optionField = 'meaning';
+        matchLen = false;
+    } else {
+        questionText = t('mc.qWordPron', { word: correctCard.word });
+        correctValue = correctCard.pronunciation;
+        optionField = 'pronunciation';
+        matchLen = true;
     }
-    
-    // Shuffle options
+
+    mcQuestion.textContent = questionText;
+
+    if (questionType === 'wordPron') {
+        distractors = pickPronDistractors(cards, correctCard, optionCount - 1);
+    } else if (questionType === 'pronunciation') {
+        distractors = pickDistractors(cards, correctCard, optionField, optionCount - 1, matchLen, normalizePinyin(correctCard.pronunciation));
+    } else {
+        distractors = pickDistractors(cards, correctCard, optionField, optionCount - 1, matchLen);
+    }
+    var options = [correctValue].concat(distractors);
     shuffleArray(options);
-    
-    // Display options
+
     mcOptions.innerHTML = '';
-    options.forEach(word => {
-        const button = document.createElement('button');
+    options.forEach(function (val) {
+        var button = document.createElement('button');
         button.className = 'option';
-        button.textContent = word;
-        button.addEventListener('click', () => checkMultipleChoiceAnswer(word, correctCard.word, button));
+        button.textContent = val;
+        button.addEventListener('click', function () {
+            checkMultipleChoiceAnswer(val, correctValue, button);
+        });
         mcOptions.appendChild(button);
     });
-    
-    currentMCQuestion = { correctWord: correctCard.word };
+
+    currentMCQuestion = { correctValue: correctValue, acceptableValues: acceptableValues || null };
 }
 
-function checkMultipleChoiceAnswer(selectedWord, correctWord, button) {
-    if (mcAnswered) return;
-    
-    mcAnswered = true;
-    const isCorrect = selectedWord === correctWord;
-    
-    // Highlight all buttons
-    const allButtons = mcOptions.querySelectorAll('.option');
-    allButtons.forEach(btn => {
-        btn.classList.add('disabled');
-        if (btn.textContent === correctWord) {
-            btn.classList.add('correct');
-        } else if (btn === button && !isCorrect) {
-            btn.classList.add('incorrect');
-        }
-    });
-    
+function checkMultipleChoiceAnswer(selectedValue, correctValue, button) {
+    if (mcAnswered || button.classList.contains('disabled')) return;
+
+    var acceptable = currentMCQuestion.acceptableValues;
+    var isCorrect = acceptable ? acceptable.has(selectedValue) : (selectedValue === correctValue);
+
     if (isCorrect) {
+        mcAnswered = true;
+        button.classList.add('correct');
+        var allButtons = mcOptions.querySelectorAll('.option');
+        allButtons.forEach(function (btn) {
+            btn.classList.add('disabled');
+            if (acceptable && acceptable.has(btn.textContent)) btn.classList.add('correct');
+        });
+
         mcFeedback.textContent = t('mc.correct');
         mcFeedback.className = 'feedback correct';
+        startAutoAdvance(mcNextBtn, nextMultipleChoiceQuestion, 3);
+        if (mcNextBtn) mcNextBtn.focus();
     } else {
-        mcFeedback.textContent = t('mc.wrong', { word: correctWord });
-        mcFeedback.className = 'feedback incorrect';
+        button.classList.add('incorrect', 'disabled');
+
+        var remainingBtns = mcOptions.querySelectorAll('.option:not(.disabled)');
+        var allRemainingAcceptable = true;
+        remainingBtns.forEach(function (btn) {
+            if (!acceptable || !acceptable.has(btn.textContent)) {
+                allRemainingAcceptable = false;
+            }
+        });
+
+        if (remainingBtns.length === 0 || (remainingBtns.length <= 1 && !acceptable) || allRemainingAcceptable) {
+            mcAnswered = true;
+            var allButtons = mcOptions.querySelectorAll('.option');
+            allButtons.forEach(function (btn) {
+                btn.classList.add('disabled');
+                if (btn.textContent === correctValue) btn.classList.add('correct');
+                if (acceptable && acceptable.has(btn.textContent)) btn.classList.add('correct');
+            });
+            mcFeedback.textContent = t('mc.wrong', { word: correctValue });
+            mcFeedback.className = 'feedback incorrect';
+        } else {
+            mcFeedback.textContent = t('mc.tryAgain');
+            mcFeedback.className = 'feedback incorrect';
+        }
     }
 }
 
@@ -579,6 +734,7 @@ function initPronunciation() {
 }
 
 function nextPronunciationQuestion() {
+    cancelAutoAdvance();
     if (cards.length === 0) {
         showEmptyState('pronunciation');
         return;
@@ -600,6 +756,7 @@ function nextPronunciationQuestion() {
         correctPronunciation: card.pronunciation,
         word: card.word
     };
+    if (wpAnswer) wpAnswer.focus();
 }
 
 function checkPronunciationAnswer() {
@@ -608,7 +765,6 @@ function checkPronunciationAnswer() {
     const userAnswer = wpAnswer.value.trim().toLowerCase();
     const correctAnswer = currentWPQuestion.correctPronunciation.toLowerCase();
     
-    // Normalize tone numbers (e.g., xièxie becomes xie4xie0)
     const normalizedUser = normalizePinyin(userAnswer);
     const normalizedCorrect = normalizePinyin(correctAnswer);
     
@@ -617,8 +773,14 @@ function checkPronunciationAnswer() {
     if (isCorrect) {
         wpFeedback.textContent = t('wp.correct');
         wpFeedback.className = 'feedback correct';
+        startAutoAdvance(wpNextBtn, nextPronunciationQuestion, 3);
+        if (wpNextBtn) wpNextBtn.focus();
     } else {
         wpFeedback.textContent = t('wp.wrong', { pron: currentWPQuestion.correctPronunciation });
+        var diffEl = document.createElement('div');
+        diffEl.className = 'pinyin-diff';
+        diffEl.innerHTML = buildPinyinDiff(normalizedUser, normalizedCorrect);
+        wpFeedback.appendChild(diffEl);
         wpFeedback.className = 'feedback incorrect';
     }
 }
@@ -632,6 +794,7 @@ function initWriting() {
 }
 
 function nextSpellingQuestion() {
+    cancelAutoAdvance();
     if (cards.length === 0) {
         showEmptyState('writing');
         return;
@@ -661,6 +824,7 @@ function nextSpellingQuestion() {
         correctSpelling: card.word,
         questionType: questionType
     };
+    if (wsAnswer) wsAnswer.focus();
 }
 
 function checkSpellingAnswer() {
@@ -674,6 +838,8 @@ function checkSpellingAnswer() {
     if (isCorrect) {
         wsFeedback.textContent = t('ws.correct');
         wsFeedback.className = 'feedback correct';
+        startAutoAdvance(wsNextBtn, nextSpellingQuestion, 3);
+        if (wsNextBtn) wsNextBtn.focus();
     } else {
         wsFeedback.textContent = t('ws.wrong', { word: correctAnswer });
         wsFeedback.className = 'feedback incorrect';
@@ -689,8 +855,45 @@ function shuffleArray(array) {
     return array;
 }
 
+// Auto-advance timer (starts countdown after a correct answer)
+var _autoAdvanceInterval = null;
+var _autoAdvanceBtn = null;
+var _autoAdvanceBtnText = null;
+
+function cancelAutoAdvance() {
+    if (_autoAdvanceInterval) {
+        clearInterval(_autoAdvanceInterval);
+        _autoAdvanceInterval = null;
+    }
+    if (_autoAdvanceBtn) {
+        _autoAdvanceBtn.textContent = _autoAdvanceBtnText;
+        _autoAdvanceBtn = null;
+        _autoAdvanceBtnText = null;
+    }
+}
+
+function startAutoAdvance(nextBtn, nextFn, seconds) {
+    cancelAutoAdvance();
+    if (!nextBtn) return;
+
+    _autoAdvanceBtn = nextBtn;
+    _autoAdvanceBtnText = nextBtn.textContent;
+
+    var remaining = seconds;
+    nextBtn.textContent = _autoAdvanceBtnText + ' (' + remaining + ')';
+
+    _autoAdvanceInterval = setInterval(function () {
+        remaining--;
+        if (remaining > 0) {
+            nextBtn.textContent = _autoAdvanceBtnText + ' (' + remaining + ')';
+        } else {
+            cancelAutoAdvance();
+            nextFn();
+        }
+    }, 1000);
+}
+
 function normalizePinyin(pinyin) {
-    // Convert tone marks to numbers and remove spaces
     return pinyin
         .replace(/ /g, '')
         .replace(/ā/g, 'a1').replace(/á/g, 'a2').replace(/ǎ/g, 'a3').replace(/à/g, 'a4')
@@ -699,7 +902,43 @@ function normalizePinyin(pinyin) {
         .replace(/ō/g, 'o1').replace(/ó/g, 'o2').replace(/ǒ/g, 'o3').replace(/ò/g, 'o4')
         .replace(/ū/g, 'u1').replace(/ú/g, 'u2').replace(/ǔ/g, 'u3').replace(/ù/g, 'u4')
         .replace(/ǖ/g, 'v1').replace(/ǘ/g, 'v2').replace(/ǚ/g, 'v3').replace(/ǜ/g, 'v4')
+        .replace(/([1-4])([aeiou\u00fc]*(ng|n(?![aeiou\u00fc])|r(?![aeiou\u00fc]))?)/g, '$2$1')
+        .replace(/([a-z\u00fc])[05]/g, '$1')
         .toLowerCase();
+}
+
+function splitPinyinSyllables(normalized) {
+    var result = [];
+    var re = /([a-z\u00fc]+)([1-4])?/g;
+    var m;
+    while ((m = re.exec(normalized)) !== null) {
+        result.push({ base: m[1], tone: m[2] || '' });
+    }
+    return result;
+}
+
+function buildPinyinDiff(userNorm, correctNorm) {
+    var userSyl = splitPinyinSyllables(userNorm);
+    var correctSyl = splitPinyinSyllables(correctNorm);
+    var html = '';
+
+    for (var i = 0; i < correctSyl.length; i++) {
+        var cb = correctSyl[i].base;
+        var ct = correctSyl[i].tone;
+        var ub = i < userSyl.length ? userSyl[i].base : '';
+        var ut = i < userSyl.length ? userSyl[i].tone : '';
+
+        if (cb === ub && ct === ut) {
+            html += '<span class="diff-ok">' + cb + ct + '</span>';
+        } else if (cb === ub) {
+            html += '<span class="diff-ok">' + cb + '</span>';
+            html += '<span class="diff-wrong">' + (ct || '∅') + '</span>';
+        } else {
+            html += '<span class="diff-wrong">' + cb + ct + '</span>';
+        }
+    }
+
+    return html;
 }
 
 // Initialize the application when the page loads

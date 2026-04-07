@@ -192,16 +192,20 @@ button:hover {
 }
 
 .option {
-    flex: 1;
-    min-width: 120px;
+    flex: 0 0 calc(25% - 8px);
+    min-width: 0;
+    box-sizing: border-box;
+    margin: 0;
 }
 
 .option.correct {
     background-color: #27ae60;
+    color: #fff;
 }
 
 .option.incorrect {
     background-color: #e74c3c;
+    color: #fff;
 }
 
 .option.disabled {
@@ -237,6 +241,21 @@ input[type="text"] {
 
 .incorrect {
     color: #e74c3c;
+}
+
+.pinyin-diff {
+    margin-top: 6px;
+    font-size: 1.4em;
+    letter-spacing: 0.5px;
+}
+
+.diff-ok {
+    color: #27ae60;
+}
+
+.diff-wrong {
+    color: #e74c3c;
+    text-decoration: underline;
 }
 
 .hidden {
