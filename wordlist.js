@@ -44,6 +44,7 @@
     var importAppendBtn = document.getElementById('wlImportAppend');
     var importCancelBtn = document.getElementById('wlImportCancel');
     var pinyinSuggestionsEl = document.getElementById('wlPinyinSuggestions');
+    var autoTranslateCheckbox = document.getElementById('wlAutoTranslate');
 
     // ── State ──
     var rows = [];
@@ -55,6 +56,8 @@
     var _suggestTimer = null;
     var _suppressBlur = false;
     var _pinyinDebounce = null;
+    var _cedictDict = null;
+    var _cedictLoading = false;
 
     // ── Helpers ──
     function t(key, vars) {
@@ -341,8 +344,48 @@
         }
     }
 
+    // ── CC-CEDICT dictionary ──
+    function isCedictEnabled() {
+        return autoTranslateCheckbox && autoTranslateCheckbox.checked && _cedictDict;
+    }
+
+    function loadCedict() {
+        if (_cedictDict || _cedictLoading) return;
+        _cedictLoading = true;
+        if (autoTranslateCheckbox) {
+            autoTranslateCheckbox.nextElementSibling.textContent = t('wl.autoTranslateLoading');
+        }
+        fetch('dict/cedict-en.json')
+            .then(function (r) {
+                if (!r.ok) throw new Error('dict');
+                return r.json();
+            })
+            .then(function (data) {
+                _cedictDict = data;
+                _cedictLoading = false;
+                if (autoTranslateCheckbox) {
+                    autoTranslateCheckbox.nextElementSibling.textContent = t('wl.autoTranslate');
+                }
+            })
+            .catch(function () {
+                _cedictLoading = false;
+                if (autoTranslateCheckbox) {
+                    autoTranslateCheckbox.checked = false;
+                    autoTranslateCheckbox.nextElementSibling.textContent = t('wl.autoTranslate');
+                }
+            });
+    }
+
+    function cedictLookup(word) {
+        if (!_cedictDict || !word) return '';
+        return _cedictDict[word] || '';
+    }
+
     // ── Row operations ──
     function addWordRow(word, pinyin, translation) {
+        if (!translation && isCedictEnabled()) {
+            translation = cedictLookup(word);
+        }
         rows.push({ word: word || '', pinyin: pinyin || '', translation: translation || '' });
     }
 
@@ -890,6 +933,12 @@
                 if (e.key === 'Enter') { e.preventDefault(); addWordsFromInput(); }
             });
             addInput.addEventListener('input', onAddInputChanged);
+        }
+
+        if (autoTranslateCheckbox) {
+            autoTranslateCheckbox.addEventListener('change', function () {
+                if (autoTranslateCheckbox.checked) loadCedict();
+            });
         }
 
         if (undoBtn) undoBtn.addEventListener('click', undo);
