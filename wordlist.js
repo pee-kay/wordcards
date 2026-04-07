@@ -21,9 +21,11 @@
     var undoBtn = document.getElementById('wlUndo');
     var redoBtn = document.getElementById('wlRedo');
     var sortBtn = document.getElementById('wlSort');
-    var dedupBtn = document.getElementById('wlDedup');
+    var sortMenu = document.getElementById('wlSortMenu');
     var exportBtn = document.getElementById('wlExport');
     var importBtn = document.getElementById('wlImport');
+    var copyBtn = document.getElementById('wlCopy');
+    var pasteBtn = document.getElementById('wlPaste');
     var clearBtn = document.getElementById('wlClear');
     var fileInput = document.getElementById('wlFileInput');
     var statsEl = document.getElementById('wlStats');
@@ -37,6 +39,10 @@
     var suggestTextEl = document.getElementById('wlSuggestText');
     var suggestAcceptBtn = document.getElementById('wlSuggestAccept');
     var suggestDismissBtn = document.getElementById('wlSuggestDismiss');
+    var importDialog = document.getElementById('wlImportDialog');
+    var importReplaceBtn = document.getElementById('wlImportReplace');
+    var importAppendBtn = document.getElementById('wlImportAppend');
+    var importCancelBtn = document.getElementById('wlImportCancel');
 
     // ── State ──
     var rows = [];
@@ -146,6 +152,22 @@
         _suggestAcceptFn = null;
     }
 
+    // ── Import mode dialog ──
+    var _importDialogCb = null;
+
+    function askImportMode(callback) {
+        if (rows.length === 0) { callback('replace'); return; }
+        _importDialogCb = callback;
+        if (importDialog) importDialog.classList.remove('hidden');
+    }
+
+    function closeImportDialog(mode) {
+        if (importDialog) importDialog.classList.add('hidden');
+        var cb = _importDialogCb;
+        _importDialogCb = null;
+        if (cb && mode) cb(mode);
+    }
+
     // ── Undo / Redo ──
     function saveSnapshot() {
         undoStack.push(JSON.stringify(rows));
@@ -184,8 +206,17 @@
         if (!tableBody) return;
         tableBody.innerHTML = '';
 
+        var wordCounts = {};
+        for (var i = 0; i < rows.length; i++) {
+            var w = rows[i].word;
+            if (w) wordCounts[w] = (wordCounts[w] || 0) + 1;
+        }
+
         for (var i = 0; i < rows.length; i++) {
             var tr = document.createElement('tr');
+            if (rows[i].word && wordCounts[rows[i].word] > 1) {
+                tr.classList.add('wl-duplicate');
+            }
 
             var tdNum = document.createElement('td');
             tdNum.textContent = i + 1;
@@ -333,36 +364,46 @@
         renderTable();
     }
 
-    function sortRows() {
-        if (rows.length === 0) return;
-        saveSnapshot();
-        rows.sort(function (a, b) {
-            var la = a.word.length, lb = b.word.length;
-            if (la !== lb) return la - lb;
-            return a.word.localeCompare(b.word, 'zh');
-        });
-        renderTable();
+    function toggleSortMenu() {
+        if (!sortMenu) return;
+        sortMenu.classList.toggle('hidden');
     }
 
-    function deduplicateRows() {
+    function closeSortMenu() {
+        if (sortMenu) sortMenu.classList.add('hidden');
+    }
+
+    function sortRows(mode) {
         if (rows.length === 0) return;
-        var seen = {};
-        var filtered = [];
-        for (var i = 0; i < rows.length; i++) {
-            if (!seen[rows[i].word]) {
-                seen[rows[i].word] = true;
-                filtered.push(rows[i]);
-            }
-        }
-        var removed = rows.length - filtered.length;
-        if (removed === 0) {
-            alert(t('wl.dedupNone'));
-            return;
-        }
         saveSnapshot();
-        rows = filtered;
+        switch (mode) {
+        case 'pinyin':
+            rows.sort(function (a, b) {
+                return (a.pinyin || '').localeCompare(b.pinyin || '');
+            });
+            break;
+        case 'translation':
+            rows.sort(function (a, b) {
+                return (a.translation || '').localeCompare(b.translation || '');
+            });
+            break;
+        case 'radical':
+            rows.sort(function (a, b) {
+                var ca = (a.word || '').charCodeAt(0) || 0;
+                var cb = (b.word || '').charCodeAt(0) || 0;
+                if (ca !== cb) return ca - cb;
+                return (a.word || '').localeCompare(b.word || '', 'zh');
+            });
+            break;
+        default:
+            rows.sort(function (a, b) {
+                var la = a.word.length, lb = b.word.length;
+                if (la !== lb) return la - lb;
+                return a.word.localeCompare(b.word, 'zh');
+            });
+            break;
+        }
         renderTable();
-        alert(t('wl.dedupResult', { n: removed }));
     }
 
     function clearAll() {
@@ -394,6 +435,53 @@
     // ── CSV export / import ──
     function exportCsv() {
         if (rows.length === 0) return;
+        var text = buildCsvText();
+        var blob = new Blob([text], { type: 'text/csv;charset=utf-8' });
+        var a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = 'wordlist.csv';
+        a.click();
+        URL.revokeObjectURL(a.href);
+    }
+
+    function parseCsvText(text) {
+        var lines = text.split(/\r?\n/);
+        var result = [];
+        for (var i = 0; i < lines.length; i++) {
+            var line = lines[i].trim();
+            if (!line) continue;
+            var fields = parseCsvLine(line);
+            result.push({ word: fields[0] || '', pinyin: fields[1] || '', translation: fields[2] || '' });
+        }
+        return result;
+    }
+
+    function applyImportedRows(newRows, mode) {
+        if (newRows.length === 0) return;
+        saveSnapshot();
+        if (mode === 'replace') {
+            rows = newRows;
+        } else {
+            rows = rows.concat(newRows);
+        }
+        renderTable();
+    }
+
+    function importCsv(file) {
+        var reader = new FileReader();
+        reader.onload = function () {
+            var text = reader.result;
+            var parsed = parseCsvText(text);
+            if (parsed.length > 0) {
+                askImportMode(function (mode) {
+                    applyImportedRows(parsed, mode);
+                });
+            }
+        };
+        reader.readAsText(file);
+    }
+
+    function buildCsvText() {
         var lines = [];
         for (var i = 0; i < rows.length; i++) {
             var r = rows[i];
@@ -403,37 +491,28 @@
                 escapeCsvField(r.translation)
             );
         }
-        var blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8' });
-        var a = document.createElement('a');
-        a.href = URL.createObjectURL(blob);
-        a.download = 'wordlist.csv';
-        a.click();
-        URL.revokeObjectURL(a.href);
+        return lines.join('\n');
     }
 
-    function importCsv(file) {
-        var reader = new FileReader();
-        reader.onload = function () {
-            var text = reader.result;
-            var lines = text.split(/\r?\n/);
-            var newRows = [];
-            for (var i = 0; i < lines.length; i++) {
-                var line = lines[i].trim();
-                if (!line) continue;
-                var fields = parseCsvLine(line);
-                newRows.push({
-                    word: fields[0] || '',
-                    pinyin: fields[1] || '',
-                    translation: fields[2] || ''
+    function copyToClipboard() {
+        if (rows.length === 0) return;
+        var text = buildCsvText();
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(text);
+        }
+    }
+
+    function loadFromClipboard() {
+        if (!navigator.clipboard || !navigator.clipboard.readText) return;
+        navigator.clipboard.readText().then(function (text) {
+            if (!text || !text.trim()) return;
+            var parsed = parseCsvText(text);
+            if (parsed.length > 0) {
+                askImportMode(function (mode) {
+                    applyImportedRows(parsed, mode);
                 });
             }
-            if (newRows.length > 0) {
-                saveSnapshot();
-                rows = rows.concat(newRows);
-                renderTable();
-            }
-        };
-        reader.readAsText(file);
+        });
     }
 
     // ── Thematic list picker ──
@@ -582,9 +661,20 @@
 
         if (undoBtn) undoBtn.addEventListener('click', undo);
         if (redoBtn) redoBtn.addEventListener('click', redo);
-        if (sortBtn) sortBtn.addEventListener('click', sortRows);
-        if (dedupBtn) dedupBtn.addEventListener('click', deduplicateRows);
+        if (sortBtn) sortBtn.addEventListener('click', function (e) {
+            e.stopPropagation();
+            toggleSortMenu();
+        });
+        if (sortMenu) sortMenu.addEventListener('click', function (e) {
+            var target = e.target;
+            if (target.tagName === 'BUTTON' && target.dataset.sort) {
+                closeSortMenu();
+                sortRows(target.dataset.sort);
+            }
+        });
         if (exportBtn) exportBtn.addEventListener('click', exportCsv);
+        if (copyBtn) copyBtn.addEventListener('click', copyToClipboard);
+        if (pasteBtn) pasteBtn.addEventListener('click', loadFromClipboard);
         if (clearBtn) clearBtn.addEventListener('click', clearAll);
 
         if (importBtn && fileInput) {
@@ -611,6 +701,10 @@
         });
         if (suggestDismissBtn) suggestDismissBtn.addEventListener('click', hideSuggestion);
 
+        if (importReplaceBtn) importReplaceBtn.addEventListener('click', function () { closeImportDialog('replace'); });
+        if (importAppendBtn) importAppendBtn.addEventListener('click', function () { closeImportDialog('append'); });
+        if (importCancelBtn) importCancelBtn.addEventListener('click', function () { closeImportDialog(null); });
+
         if (wlTable) {
             wlTable.addEventListener('input', hideSuggestion);
         }
@@ -618,6 +712,11 @@
         document.addEventListener('mousedown', function (e) {
             if (suggestEl && !suggestEl.classList.contains('hidden') && !suggestEl.contains(e.target)) {
                 hideSuggestion();
+            }
+            var sortWrap = sortBtn && sortBtn.parentElement;
+            if (sortMenu && !sortMenu.classList.contains('hidden') &&
+                sortWrap && !sortWrap.contains(e.target)) {
+                closeSortMenu();
             }
         });
 

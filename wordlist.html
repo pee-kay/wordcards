@@ -29,10 +29,19 @@
                 <div class="wl-toolbar">
                     <button type="button" id="wlUndo" data-i18n="wl.undo" disabled>Undo</button>
                     <button type="button" id="wlRedo" data-i18n="wl.redo" disabled>Redo</button>
-                    <button type="button" id="wlSort" data-i18n="wl.sort">Sort</button>
-                    <button type="button" id="wlDedup" data-i18n="wl.dedup">Deduplicate</button>
+                    <div class="wl-sort-wrap">
+                        <button type="button" id="wlSort" data-i18n="wl.sort">Sort</button>
+                        <div id="wlSortMenu" class="wl-sort-menu hidden">
+                            <button type="button" data-sort="pinyinSize" data-i18n="wl.sortPinyinSize">By pinyin (by size)</button>
+                            <button type="button" data-sort="pinyin" data-i18n="wl.sortPinyin">By pinyin</button>
+                            <button type="button" data-sort="translation" data-i18n="wl.sortTranslation">By translation</button>
+                            <button type="button" data-sort="radical" data-i18n="wl.sortRadical">By radical</button>
+                        </div>
+                    </div>
                     <button type="button" id="wlExport" data-i18n="wl.exportCsv">Export CSV</button>
                     <button type="button" id="wlImport" data-i18n="wl.importCsv">Import CSV</button>
+                    <button type="button" id="wlCopy" data-i18n="wl.copyClipboard">Copy to clipboard</button>
+                    <button type="button" id="wlPaste" data-i18n="wl.loadClipboard">Load from clipboard</button>
                     <button type="button" id="wlClear" data-i18n="wl.clearAll">Clear all</button>
                 </div>
             </div>
@@ -71,6 +80,17 @@
                 <button type="button" id="wlThematicAddAll" class="hidden" data-i18n="wl.thematicAddAll">Add all</button>
             </div>
             <div id="wlThematicGrid" class="wl-thematic-grid hidden"></div>
+        </div>
+    </div>
+
+    <div id="wlImportDialog" class="wl-dialog-overlay hidden">
+        <div class="wl-dialog">
+            <p data-i18n="wl.importAsk">How should the data be loaded?</p>
+            <div class="wl-dialog-actions">
+                <button type="button" id="wlImportReplace" data-i18n="wl.importReplace">Replace list</button>
+                <button type="button" id="wlImportAppend" data-i18n="wl.importAppend">Add to end</button>
+                <button type="button" id="wlImportCancel" data-i18n="wl.importCancel">Cancel</button>
+            </div>
         </div>
     </div>
 
