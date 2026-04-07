@@ -5,6 +5,7 @@
     var CSV_DIR = 'csv/';
     var MAX_UNDO = 50;
     var STORAGE_KEY = 'wordcards_wl_rows';
+    var GOOGLE_PINYIN_API = 'https://inputtools.google.com/request';
 
     var TONE_MARKS = {
         'a': ['\u0101', '\u00e1', '\u01ce', '\u00e0'],
@@ -17,7 +18,6 @@
 
     // ── DOM refs ──
     var addInput = document.getElementById('wlAddInput');
-    var addBtn = document.getElementById('wlAddBtn');
     var undoBtn = document.getElementById('wlUndo');
     var redoBtn = document.getElementById('wlRedo');
     var sortBtn = document.getElementById('wlSort');
@@ -43,6 +43,7 @@
     var importReplaceBtn = document.getElementById('wlImportReplace');
     var importAppendBtn = document.getElementById('wlImportAppend');
     var importCancelBtn = document.getElementById('wlImportCancel');
+    var pinyinSuggestionsEl = document.getElementById('wlPinyinSuggestions');
 
     // ── State ──
     var rows = [];
@@ -53,6 +54,7 @@
     var _suggestAcceptFn = null;
     var _suggestTimer = null;
     var _suppressBlur = false;
+    var _pinyinDebounce = null;
 
     // ── Helpers ──
     function t(key, vars) {
@@ -95,6 +97,16 @@
             return applyToneMark(syl, parseInt(tone));
         });
         return s;
+    }
+
+    function stripToneMarks(str) {
+        return str
+            .replace(/[\u0101\u00e1\u01ce\u00e0]/g, 'a')
+            .replace(/[\u0113\u00e9\u011b\u00e8]/g, 'e')
+            .replace(/[\u012b\u00ed\u01d0\u00ec]/g, 'i')
+            .replace(/[\u014d\u00f3\u01d2\u00f2]/g, 'o')
+            .replace(/[\u016b\u00fa\u01d4\u00f9]/g, 'u')
+            .replace(/[\u01d6\u01d8\u01da\u01dc]/g, '\u00fc');
     }
 
     function parseCsvLine(line) {
@@ -239,6 +251,7 @@
 
         updateStats();
         dimThematicWords();
+        dimPinyinSuggestionWords();
         persistRows();
     }
 
@@ -421,15 +434,23 @@
         if (!text) return;
 
         var tokens = text.split(/[,，\s]+/).filter(function (s) { return s.length > 0; });
-        if (tokens.length === 0) return;
-
-        saveSnapshot();
+        var added = [];
+        var kept = [];
         for (var i = 0; i < tokens.length; i++) {
-            var w = tokens[i];
-            addWordRow(w, getPinyin(w), '');
+            if (/[\u4e00-\u9fff]/.test(tokens[i]) && !/[a-zA-Z]/.test(tokens[i])) {
+                added.push(tokens[i]);
+            } else {
+                kept.push(tokens[i]);
+            }
         }
-        addInput.value = '';
+        if (added.length === 0) return;
+        saveSnapshot();
+        for (var i = 0; i < added.length; i++) {
+            addWordRow(added[i], getPinyin(added[i]), '');
+        }
+        addInput.value = kept.join(', ');
         renderTable();
+        updatePinyinSuggestions();
     }
 
     // ── CSV export / import ──
@@ -513,6 +534,216 @@
                 });
             }
         });
+    }
+
+    // ── Pinyin input suggestions ──
+    function onAddInputChanged() {
+        clearTimeout(_pinyinDebounce);
+        _pinyinDebounce = setTimeout(updatePinyinSuggestions, 300);
+    }
+
+    function classifyToken(token) {
+        var hasHanzi = /[\u4e00-\u9fff\u3400-\u4dbf\uf900-\ufaff]/.test(token);
+        var hasLatin = /[a-zA-Z]/.test(token);
+        if (hasHanzi && !hasLatin) return 'hanzi';
+        if (hasLatin && !hasHanzi) return 'pinyin';
+        if (hasHanzi && hasLatin) return 'mixed';
+        return 'other';
+    }
+
+    function parseSegments(token) {
+        var segments = [];
+        var re = /([\u4e00-\u9fff\u3400-\u4dbf\uf900-\ufaff]+)|([^\u4e00-\u9fff\u3400-\u4dbf\uf900-\ufaff]+)/g;
+        var m;
+        while ((m = re.exec(token)) !== null) {
+            if (m[1]) segments.push({ type: 'hanzi', text: m[1] });
+            else if (m[2] && /[a-zA-Z]/.test(m[2])) segments.push({ type: 'pinyin', text: m[2] });
+        }
+        return segments;
+    }
+
+    function updatePinyinSuggestions() {
+        if (!pinyinSuggestionsEl || !addInput) return;
+        var text = addInput.value.trim();
+        if (!text) { pinyinSuggestionsEl.innerHTML = ''; return; }
+
+        var tokens = text.split(/[,，]/).map(function (s) { return s.trim(); })
+            .filter(function (s) { return s.length > 0; });
+
+        if (tokens.length === 0) { pinyinSuggestionsEl.innerHTML = ''; return; }
+
+        pinyinSuggestionsEl.innerHTML = '';
+        for (var i = 0; i < tokens.length; i++) {
+            var type = classifyToken(tokens[i]);
+            if (type === 'hanzi') {
+                renderChineseRow(tokens[i]);
+            } else if (type === 'pinyin') {
+                fetchPinyinCandidates(tokens[i]);
+            } else if (type === 'mixed') {
+                fetchMixedCandidates(tokens[i]);
+            }
+        }
+    }
+
+    function renderChineseRow(token) {
+        var words = token.split(/\s+/).filter(function (s) { return s.length > 0; });
+        if (words.length === 0) return;
+        renderPinyinRow(token, words);
+    }
+
+    function preparePinyinQuery(token) {
+        var normalized = normalizePinyinInput(token);
+        var base = stripToneMarks(normalized).toLowerCase();
+        return { base: base, normalized: normalized, hasTones: normalized !== base };
+    }
+
+    function fetchPinyinCandidates(token) {
+        var q = preparePinyinQuery(token);
+        if (!q.base) return;
+
+        var url = GOOGLE_PINYIN_API +
+            '?text=' + encodeURIComponent(q.base) +
+            '&itc=zh-t-i0-pinyin&num=13&cp=0&cs=1&ie=utf-8&oe=utf-8&app=test';
+
+        fetch(url)
+            .then(function (r) { return r.json(); })
+            .then(function (data) {
+                if (!data || data[0] !== 'SUCCESS' || !data[1] || !data[1][0]) return;
+                var candidates = data[1][0][1] || [];
+
+                if (q.hasTones && candidates.length > 0) {
+                    candidates = filterByTones(candidates, q.normalized);
+                }
+
+                renderPinyinRow(token, candidates.slice(0, 10));
+            })
+            .catch(function () { /* network */ });
+    }
+
+    function fetchMixedCandidates(token) {
+        var segments = parseSegments(token);
+        if (segments.length === 0) return;
+
+        var pinyinParts = [];
+        var hasPinyinTones = false;
+        for (var i = 0; i < segments.length; i++) {
+            if (segments[i].type === 'hanzi') {
+                var hp = getPinyin(segments[i].text);
+                pinyinParts.push(stripToneMarks(hp).toLowerCase());
+            } else {
+                var norm = normalizePinyinInput(segments[i].text);
+                if (norm !== stripToneMarks(norm)) hasPinyinTones = true;
+                pinyinParts.push(stripToneMarks(norm).toLowerCase());
+            }
+        }
+        var baseQuery = pinyinParts.join('');
+        if (!baseQuery) return;
+
+        var expectedToned = '';
+        if (hasPinyinTones) {
+            var tonedParts = [];
+            for (var i = 0; i < segments.length; i++) {
+                if (segments[i].type === 'hanzi') {
+                    tonedParts.push(getPinyin(segments[i].text));
+                } else {
+                    tonedParts.push(normalizePinyinInput(segments[i].text));
+                }
+            }
+            expectedToned = tonedParts.join('');
+        }
+
+        var url = GOOGLE_PINYIN_API +
+            '?text=' + encodeURIComponent(baseQuery) +
+            '&itc=zh-t-i0-pinyin&num=20&cp=0&cs=1&ie=utf-8&oe=utf-8&app=test';
+
+        fetch(url)
+            .then(function (r) { return r.json(); })
+            .then(function (data) {
+                if (!data || data[0] !== 'SUCCESS' || !data[1] || !data[1][0]) return;
+                var candidates = data[1][0][1] || [];
+
+                var filtered = [];
+                for (var i = 0; i < candidates.length; i++) {
+                    if (!matchesMixedTemplate(candidates[i], segments)) continue;
+                    if (hasPinyinTones && getPinyin(candidates[i]) !== expectedToned) continue;
+                    filtered.push(candidates[i]);
+                }
+
+                renderPinyinRow(token, filtered.slice(0, 10));
+            })
+            .catch(function () { /* network */ });
+    }
+
+    function matchesMixedTemplate(candidate, segments) {
+        return _tryMatch(candidate, 0, segments, 0);
+    }
+
+    function _tryMatch(candidate, ci, segments, si) {
+        if (si >= segments.length) return ci === candidate.length;
+        var seg = segments[si];
+        if (seg.type === 'hanzi') {
+            for (var j = 0; j < seg.text.length; j++) {
+                if (ci + j >= candidate.length || candidate[ci + j] !== seg.text[j]) return false;
+            }
+            return _tryMatch(candidate, ci + seg.text.length, segments, si + 1);
+        }
+        for (var len = 1; ci + len <= candidate.length; len++) {
+            if (_tryMatch(candidate, ci + len, segments, si + 1)) return true;
+        }
+        return false;
+    }
+
+    function filterByTones(candidates, normalizedInput) {
+        var result = [];
+        for (var i = 0; i < candidates.length; i++) {
+            var candidatePinyin = getPinyin(candidates[i]);
+            if (candidatePinyin === normalizedInput) {
+                result.push(candidates[i]);
+            }
+        }
+        return result;
+    }
+
+    function renderPinyinRow(label, candidates) {
+        if (!pinyinSuggestionsEl || candidates.length === 0) return;
+
+        var row = document.createElement('div');
+        row.className = 'wl-pinyin-row';
+
+        var lbl = document.createElement('span');
+        lbl.className = 'wl-pinyin-row-label';
+        lbl.textContent = label + ':';
+        row.appendChild(lbl);
+
+        var wordsInTable = buildWordSet();
+
+        for (var i = 0; i < candidates.length; i++) {
+            var btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'wl-thematic-word';
+            btn.textContent = candidates[i];
+            if (wordsInTable[candidates[i]]) btn.classList.add('wl-in-table');
+            btn.addEventListener('click', (function (word) {
+                return function () {
+                    saveSnapshot();
+                    addWordRow(word, getPinyin(word), '');
+                    renderTable();
+                    dimPinyinSuggestionWords();
+                };
+            })(candidates[i]));
+            row.appendChild(btn);
+        }
+
+        pinyinSuggestionsEl.appendChild(row);
+    }
+
+    function dimPinyinSuggestionWords() {
+        if (!pinyinSuggestionsEl) return;
+        var wordsInTable = buildWordSet();
+        var btns = pinyinSuggestionsEl.querySelectorAll('.wl-thematic-word');
+        for (var i = 0; i < btns.length; i++) {
+            btns[i].classList.toggle('wl-in-table', !!wordsInTable[btns[i].textContent]);
+        }
     }
 
     // ── Thematic list picker ──
@@ -654,10 +885,12 @@
     function init() {
         rows = loadPersistedRows();
 
-        if (addBtn) addBtn.addEventListener('click', addWordsFromInput);
-        if (addInput) addInput.addEventListener('keydown', function (e) {
-            if (e.key === 'Enter') { e.preventDefault(); addWordsFromInput(); }
-        });
+        if (addInput) {
+            addInput.addEventListener('keydown', function (e) {
+                if (e.key === 'Enter') { e.preventDefault(); addWordsFromInput(); }
+            });
+            addInput.addEventListener('input', onAddInputChanged);
+        }
 
         if (undoBtn) undoBtn.addEventListener('click', undo);
         if (redoBtn) redoBtn.addEventListener('click', redo);

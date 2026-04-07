@@ -342,12 +342,13 @@ input[type="text"] {
 
 /* Word list editor */
 .wl-add-bar {
-    display: flex;
-    gap: 8px;
+    display: block;
 }
 
 .wl-add-bar input {
-    flex: 1;
+    width: 100%;
+    max-width: none;
+    box-sizing: border-box;
     padding: 8px 12px;
     font-size: 14px;
     border: 1px solid #ccc;
@@ -356,6 +357,31 @@ input[type="text"] {
 
 .wl-add-bar button {
     margin: 0;
+}
+
+.wl-pinyin-suggestions {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-top: 8px;
+}
+
+.wl-pinyin-suggestions:empty {
+    display: none;
+}
+
+.wl-pinyin-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    align-items: center;
+}
+
+.wl-pinyin-row-label {
+    font-size: 0.85em;
+    color: #888;
+    min-width: 70px;
+    flex-shrink: 0;
 }
 
 .wl-list-header {
