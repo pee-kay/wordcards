@@ -11,14 +11,14 @@
 
     /** If I18N is missing or returns the key, still show sensible UI (English). */
     const REPO_FALLBACK_EN = {
-        'wordList.presetNone': '— Choose file —',
+        'wordList.presetNone': '— Choose word list —',
         'wordList.hide': 'Hide word list',
         'wordList.show': 'Show word list',
         'wordList.exportCsv': 'Export CSV',
         'wordList.importCsv': 'Import CSV',
-        'wordList.loadFailed': 'Could not load that file.',
+        'wordList.loadFailed': 'Could not load that list.',
         'wordList.needsServer':
-            'Preset CSV files must be loaded over HTTP. From the project folder run: python3 -m http.server then open http://127.0.0.1:8000/strokes.html (not file://).',
+            'Loading preset word list requires a connection to server.',
         'wordList.presetUnavailable': '(list unavailable)'
     };
 

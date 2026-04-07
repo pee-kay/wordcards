@@ -14,7 +14,7 @@
                 <button type="button" class="lang-btn" data-set-lang="ru" aria-pressed="false" data-i18n="lang.ru">RU</button>
             </div>
             <h1 data-i18n="strokes.h1">Stroke order practice</h1>
-            <p class="subtitle" data-i18n-html="strokes.subtitle">Build a printable sheet.</p>
+            <p class="subtitle" data-i18n-html="strokes.subtitle">Generate a printable sheet to learn strokes order. Each character is shown step by step in correct order (data from <a href="https://hanziwriter.org/" rel="noopener noreferrer">Hanzi Writer</a> is used).</p>
             <nav class="site-nav" data-i18n-aria-label="nav.aria" aria-label="Site">
                 <a href="index.html" data-i18n="nav.wordCards">Word cards</a>
                 <a href="radicals.html" data-i18n="nav.radicals">Missing strokes / radicals</a>
@@ -24,15 +24,19 @@
 
         <div class="section">
             <h2 data-i18n="strokes.wordList">Word list</h2>
-            <p class="help" data-i18n-html="strokes.wordListHelp">Formats help.</p>
+            <p class="help" data-i18n-html="strokes.wordListHelp">List words with following format <code>word,pronunciation,meaning</code> per line. You can also just enter list of chinese characters (even in single line), missing pinyin is filled with <a href="https://github.com/zh-lx/pinyin-pro" rel="noopener noreferrer">pinyin-pro</a> when the exercise is generated (needs network). Characters must exist in Hanzi Writer's dataset (most common simplified forms; some rare characters may fail).</p>
             <div class="field word-list-csv-field">
                 <select id="strokeCsvPreset" class="word-list-csv-select" data-csv-textarea-id="strokeWordInput">
-                    <option value="">— Choose file —</option>
+                    <option value="">— Choose word list —</option>
                     <option value="0.ключи.csv">0.ключи</option>
                 </select>
             </div>
             <div class="word-list-input-wrap" id="strokeWordListWrap">
-                <textarea id="strokeWordInput" data-i18n-placeholder="strokes.wordInputPlaceholder" placeholder="永"></textarea>
+                <textarea id="strokeWordInput" data-i18n-placeholder="strokes.wordInputPlaceholder" placeholder="Example:
+谢谢,xièxie,thank you
+再见,zàijiàn,goodbye
+你好,nǐhǎo,hello
+or just simply: 谢再见你好"></textarea>
             </div>
             <div class="button-group">
                 <button type="button" id="strokeExport" data-i18n="strokes.export">Export CSV</button>
@@ -43,7 +47,7 @@
         </div>
 
         <div class="section">
-            <h2 data-i18n="strokes.layoutSection">Layout & PDF</h2>
+            <h2 data-i18n="strokes.layoutSection">Parameters</h2>
             <div class="radical-options stroke-layout-options">
                 <label class="field">
                     <span data-i18n="strokes.stepsPerRow">Step boxes per row</span>
@@ -55,20 +59,20 @@
                 </label>
                 <label class="checkbox-label">
                     <input type="checkbox" id="strokeShowPinyin" checked>
-                    <span data-i18n="strokes.showPinyin">Show pinyin</span>
+                    <span data-i18n="strokes.showPinyin">Show pinyin under each character title</span>
                 </label>
             </div>
             <div class="button-group">
                 <button type="button" id="strokeBuild" class="btn-primary" data-i18n="strokes.generate">Generate</button>
             </div>
-            <p id="strokeStats" class="stats">No characters yet</p>
+            <p id="strokeStats" class="stats" data-i18n="strokes.statsNone">No characters yet</p>
             <div id="strokeWarning" class="warning hidden" role="alert"></div>
-            <div id="strokeLoading" class="info hidden" role="status" data-i18n="strokes.loading">Loading…</div>
+            <div id="strokeLoading" class="info hidden" role="status" data-i18n="strokes.loading">Loading stroke data…</div>
         </div>
 
         <div class="section" id="strokePreviewSection">
             <h2 class="no-print" data-i18n="strokes.preview">Preview</h2>
-            <p class="help no-print" data-i18n="strokes.previewHelp">Print help.</p>
+            <p class="help no-print" data-i18n="strokes.previewHelp"></p>
             <div id="strokePrintRoot" class="print-root stroke-print-root"></div>
         </div>
     </div>

@@ -14,7 +14,7 @@
                 <button type="button" class="lang-btn" data-set-lang="ru" aria-pressed="false" data-i18n="lang.ru">RU</button>
             </div>
             <h1 data-i18n="index.h1">Word Cards</h1>
-            <p class="subtitle" data-i18n="index.subtitle">Study vocabulary with flashcards, quizzes, and a simple CSV editor.</p>
+            <p class="subtitle" data-i18n="index.subtitle">Study vocabulary with flashcards, quizzes, and a simple questionnaire.</p>
             <nav class="site-nav" data-i18n-aria-label="nav.aria" aria-label="Site">
                 <a href="index.html" aria-current="page" data-i18n="nav.wordCards">Word cards</a>
                 <a href="radicals.html" data-i18n="nav.radicals">Missing strokes / radicals</a>
@@ -23,10 +23,10 @@
         </header>
 
         <div class="section">
-            <h2 data-i18n="index.selectMode">Select Mode</h2>
+            <h2 data-i18n="index.selectMode">Select mode</h2>
             <div class="mode-selector">
                 <button class="mode-btn" data-mode="flashcard" data-i18n="mode.flashcard">Flashcards</button>
-                <button class="mode-btn" data-mode="multipleChoice" data-i18n="mode.multipleChoice">Multiple Choice</button>
+                <button class="mode-btn" data-mode="multipleChoice" data-i18n="mode.multipleChoice">Multiple choice</button>
                 <button class="mode-btn" data-mode="pronunciation" data-i18n="mode.pronunciation">Pronunciation</button>
                 <button class="mode-btn" data-mode="writing" data-i18n="mode.writing">Writing</button>
                 <button class="mode-btn" data-mode="editor" data-i18n="mode.editor">Editor</button>
@@ -37,10 +37,10 @@
             <!-- Editor Mode -->
             <div id="editorMode" class="mode-content">
                 <h2 data-i18n="index.wordList">Word list</h2>
-                <p class="help" data-i18n-html="index.wordListHelp">Word list formats.</p>
+                <p class="help" data-i18n-html="index.wordListHelp">List words with following format <code>word,pronunciation,meaning</code> per line. After editing, switch to Flashcards or another mode to apply changes.</p>
                 <div class="field word-list-csv-field">
                     <select id="indexCsvPreset" class="word-list-csv-select" data-csv-textarea-id="wordInput">
-                        <option value="">— Choose file —</option>
+                        <option value="">— Choose word list —</option>
                         <option value="0.ключи.csv">0.ключи</option>
                     </select>
                 </div>
@@ -61,7 +61,7 @@
             
             <!-- Flashcard Mode -->
             <div id="flashcardMode" class="mode-content hidden">
-                <h2 data-i18n="flashcard.title">Flashcard Mode</h2>
+                <h2 data-i18n="flashcard.title">Flashcard mode</h2>
                 <div class="card-container">
                     <div class="card" id="flashcard">
                         <div class="card-face card-front">
@@ -82,7 +82,7 @@
                 <div class="navigation">
                     <button id="firstCard" data-i18n="flashcard.first">First</button>
                     <button id="prevCard" data-i18n="flashcard.prev">Previous</button>
-                    <button id="flipCard" data-i18n="flashcard.flip">Flip Card</button>
+                    <button id="flipCard" data-i18n="flashcard.flip">Flip card</button>
                     <button id="nextCard" data-i18n="flashcard.next">Next</button>
                     <button id="lastCard" data-i18n="flashcard.last">Last</button>
                 </div>
@@ -93,42 +93,42 @@
             
             <!-- Multiple Choice Mode -->
             <div id="multipleChoiceMode" class="mode-content hidden">
-                <h2 data-i18n="mc.title">Multiple Choice Mode</h2>
+                <h2 data-i18n="mc.title">Multiple choice</h2>
                 <div class="quiz-container">
                     <div class="question" id="mcQuestion">Question</div>
                     <div class="options" id="mcOptions">
                         <!-- Options will be generated here -->
                     </div>
                     <div class="feedback" id="mcFeedback"></div>
-                    <button id="mcNext" data-i18n="mc.next">Next Question</button>
+                    <button id="mcNext" data-i18n="mc.next">Next question</button>
                 </div>
             </div>
             
             <!-- Pronunciation Mode -->
             <div id="pronunciationMode" class="mode-content hidden">
-                <h2 data-i18n="wp.title">Pronunciation Mode</h2>
+                <h2 data-i18n="wp.title">Pronunciation</h2>
                 <div class="quiz-container">
                     <div class="question" id="wpQuestion">Question</div>
                     <div class="input-container">
                         <input type="text" id="wpAnswer" data-i18n-placeholder="wp.placeholder" placeholder="Enter pronunciation">
-                        <button id="wpSubmit" data-i18n="wp.check">Check Answer</button>
+                        <button id="wpSubmit" data-i18n="wp.check">Check answer</button>
                     </div>
                     <div class="feedback" id="wpFeedback"></div>
-                    <button id="wpNext" data-i18n="wp.next">Next Word</button>
+                    <button id="wpNext" data-i18n="wp.next">Next word</button>
                 </div>
             </div>
             
             <!-- Writing/Spelling Mode -->
             <div id="writingMode" class="mode-content hidden">
-                <h2 data-i18n="ws.title">Writing/Spelling Mode</h2>
+                <h2 data-i18n="ws.title">Writing / spelling</h2>
                 <div class="quiz-container">
                     <div class="question" id="wsQuestion">Question</div>
                     <div class="input-container">
                         <input type="text" id="wsAnswer" data-i18n-placeholder="ws.placeholder" placeholder="Write the word">
-                        <button id="wsSubmit" data-i18n="ws.check">Check Answer</button>
+                        <button id="wsSubmit" data-i18n="ws.check">Check answer</button>
                     </div>
                     <div class="feedback" id="wsFeedback"></div>
-                    <button id="wsNext" data-i18n="ws.next">Next Word</button>
+                    <button id="wsNext" data-i18n="ws.next">Next word</button>
                 </div>
             </div>
         </div>
