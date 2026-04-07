@@ -276,6 +276,7 @@
                     saveSnapshot();
                     rows[ri][f] = val;
                     persistRows();
+                    if (f === 'word') refreshDuplicateHighlighting();
                 }
                 if (f === 'word' && val && /[\u4e00-\u9fff]/.test(val)) {
                     var newPinyin = getPinyin(val);
@@ -341,6 +342,20 @@
             statsEl.textContent = t('wl.empty');
         } else {
             statsEl.textContent = t('wl.statsLine', { n: rows.length });
+        }
+    }
+
+    function refreshDuplicateHighlighting() {
+        if (!tableBody) return;
+        var wordCounts = {};
+        for (var i = 0; i < rows.length; i++) {
+            var w = rows[i].word;
+            if (w) wordCounts[w] = (wordCounts[w] || 0) + 1;
+        }
+        var trs = tableBody.querySelectorAll('tr');
+        for (var i = 0; i < trs.length; i++) {
+            var isDup = rows[i] && rows[i].word && wordCounts[rows[i].word] > 1;
+            trs[i].classList.toggle('wl-duplicate', !!isDup);
         }
     }
 
@@ -617,21 +632,26 @@
 
         pinyinSuggestionsEl.innerHTML = '';
         for (var i = 0; i < tokens.length; i++) {
+            var placeholder = document.createElement('div');
+            placeholder.className = 'wl-pinyin-row';
+            placeholder.dataset.token = tokens[i];
+            pinyinSuggestionsEl.appendChild(placeholder);
+
             var type = classifyToken(tokens[i]);
             if (type === 'hanzi') {
-                renderChineseRow(tokens[i]);
+                renderChineseRow(tokens[i], placeholder);
             } else if (type === 'pinyin') {
-                fetchPinyinCandidates(tokens[i]);
+                fetchPinyinCandidates(tokens[i], placeholder);
             } else if (type === 'mixed') {
-                fetchMixedCandidates(tokens[i]);
+                fetchMixedCandidates(tokens[i], placeholder);
             }
         }
     }
 
-    function renderChineseRow(token) {
+    function renderChineseRow(token, placeholder) {
         var words = token.split(/\s+/).filter(function (s) { return s.length > 0; });
         if (words.length === 0) return;
-        renderPinyinRow(token, words);
+        fillPinyinRow(placeholder, token, words);
     }
 
     function preparePinyinQuery(token) {
@@ -640,7 +660,7 @@
         return { base: base, normalized: normalized, hasTones: normalized !== base };
     }
 
-    function fetchPinyinCandidates(token) {
+    function fetchPinyinCandidates(token, placeholder) {
         var q = preparePinyinQuery(token);
         if (!q.base) return;
 
@@ -658,12 +678,12 @@
                     candidates = filterByTones(candidates, q.normalized);
                 }
 
-                renderPinyinRow(token, candidates.slice(0, 10));
+                fillPinyinRow(placeholder, token, candidates.slice(0, 10));
             })
             .catch(function () { /* network */ });
     }
 
-    function fetchMixedCandidates(token) {
+    function fetchMixedCandidates(token, placeholder) {
         var segments = parseSegments(token);
         if (segments.length === 0) return;
 
@@ -712,7 +732,7 @@
                     filtered.push(candidates[i]);
                 }
 
-                renderPinyinRow(token, filtered.slice(0, 10));
+                fillPinyinRow(placeholder, token, filtered.slice(0, 10));
             })
             .catch(function () { /* network */ });
     }
@@ -747,11 +767,13 @@
         return result;
     }
 
-    function renderPinyinRow(label, candidates) {
-        if (!pinyinSuggestionsEl || candidates.length === 0) return;
+    function fillPinyinRow(row, label, candidates) {
+        if (!row || candidates.length === 0) {
+            if (row && row.parentNode) row.parentNode.removeChild(row);
+            return;
+        }
 
-        var row = document.createElement('div');
-        row.className = 'wl-pinyin-row';
+        row.innerHTML = '';
 
         var lbl = document.createElement('span');
         lbl.className = 'wl-pinyin-row-label';
@@ -776,8 +798,6 @@
             })(candidates[i]));
             row.appendChild(btn);
         }
-
-        pinyinSuggestionsEl.appendChild(row);
     }
 
     function dimPinyinSuggestionWords() {
