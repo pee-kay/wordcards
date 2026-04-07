@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title data-i18n="wl.documentTitle">Word List Editor</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body class="wordlist-page">
+    <div class="container container--wide">
+        <header class="page-header">
+            <div class="lang-switch" role="group" data-i18n-aria-label="lang.label" aria-label="Language">
+                <button type="button" class="lang-btn" data-set-lang="en" aria-pressed="false" data-i18n="lang.en">EN</button>
+                <button type="button" class="lang-btn" data-set-lang="ru" aria-pressed="false" data-i18n="lang.ru">RU</button>
+            </div>
+            <h1 data-i18n="wl.h1">Word List Editor</h1>
+            <p class="subtitle" data-i18n="wl.subtitle">Build and edit word lists for use in flashcards, quizzes, and exercises.</p>
+            <nav class="site-nav" data-i18n-aria-label="nav.aria" aria-label="Site">
+                <a href="index.html" data-i18n="nav.wordCards">Word cards</a>
+                <a href="radicals.html" data-i18n="nav.radicals">Missing strokes / radicals</a>
+                <a href="strokes.html" data-i18n="nav.strokes">Stroke order</a>
+                <a href="wordlist.html" aria-current="page" data-i18n="nav.wordList">Word list editor</a>
+            </nav>
+        </header>
+
+        <div class="section">
+            <h2 data-i18n="wl.addWords">Add words</h2>
+            <div class="wl-add-bar">
+                <input type="text" id="wlAddInput" data-i18n-placeholder="wl.addPlaceholder" placeholder="Enter Chinese words separated by commas or spaces">
+                <button type="button" id="wlAddBtn" data-i18n="wl.addBtn">Add</button>
+            </div>
+        </div>
+
+        <div class="section">
+            <h2 data-i18n="wl.thematic">Add from thematic lists</h2>
+            <div class="wl-thematic-bar">
+                <select id="wlThematicSelect">
+                    <option value="" data-i18n="wl.thematicSelect">— Choose a thematic list —</option>
+                </select>
+                <button type="button" id="wlThematicToggle" class="hidden" data-i18n="wl.thematicHide">Hide words</button>
+                <button type="button" id="wlThematicAddAll" class="hidden" data-i18n="wl.thematicAddAll">Add all</button>
+            </div>
+            <div id="wlThematicGrid" class="wl-thematic-grid hidden"></div>
+        </div>
+
+        <div class="section">
+            <h2 data-i18n="wl.toolbar">Tools</h2>
+            <div class="wl-toolbar">
+                <button type="button" id="wlUndo" data-i18n="wl.undo" disabled>Undo</button>
+                <button type="button" id="wlRedo" data-i18n="wl.redo" disabled>Redo</button>
+                <button type="button" id="wlSort" data-i18n="wl.sort">Sort</button>
+                <button type="button" id="wlDedup" data-i18n="wl.dedup">Deduplicate</button>
+                <button type="button" id="wlExport" data-i18n="wl.exportCsv">Export CSV</button>
+                <button type="button" id="wlImport" data-i18n="wl.importCsv">Import CSV</button>
+                <button type="button" id="wlClear" data-i18n="wl.clearAll">Clear all</button>
+            </div>
+            <p id="wlStats" class="stats" data-i18n="wl.empty">No words yet. Add words above or import a CSV file.</p>
+        </div>
+
+        <div class="section">
+            <h2 data-i18n="wl.table">Word list</h2>
+            <div class="wl-table-wrap">
+                <table class="wl-table" id="wlTable">
+                    <thead>
+                        <tr>
+                            <th data-i18n="wl.colNum">#</th>
+                            <th data-i18n="wl.colWord">Word</th>
+                            <th data-i18n="wl.colPinyin">Pinyin</th>
+                            <th data-i18n="wl.colTranslation">Translation</th>
+                            <th data-i18n="wl.colActions">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="wlTableBody"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <input type="file" id="wlFileInput" accept=".csv,.txt" class="hidden-file-input" aria-hidden="true">
+
+    <script src="https://unpkg.com/pinyin-pro@3.26.0/dist/index.js"></script>
+    <script src="i18n.js"></script>
+    <script src="csv-wordlists.js"></script>
+    <script src="wordlist.js"></script>
+</body>
+</html>
