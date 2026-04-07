@@ -4,6 +4,16 @@
     var MANIFEST_PATH = 'csv/csv-manifest.json';
     var CSV_DIR = 'csv/';
     var MAX_UNDO = 50;
+    var STORAGE_KEY = 'wordcards_wl_rows';
+
+    var TONE_MARKS = {
+        'a': ['\u0101', '\u00e1', '\u01ce', '\u00e0'],
+        'e': ['\u0113', '\u00e9', '\u011b', '\u00e8'],
+        'i': ['\u012b', '\u00ed', '\u01d0', '\u00ec'],
+        'o': ['\u014d', '\u00f3', '\u01d2', '\u00f2'],
+        'u': ['\u016b', '\u00fa', '\u01d4', '\u00f9'],
+        '\u00fc': ['\u01d6', '\u01d8', '\u01da', '\u01dc']
+    };
 
     // ── DOM refs ──
     var addInput = document.getElementById('wlAddInput');
@@ -18,10 +28,15 @@
     var fileInput = document.getElementById('wlFileInput');
     var statsEl = document.getElementById('wlStats');
     var tableBody = document.getElementById('wlTableBody');
+    var wlTable = document.getElementById('wlTable');
     var thematicSelect = document.getElementById('wlThematicSelect');
     var thematicToggle = document.getElementById('wlThematicToggle');
     var thematicAddAll = document.getElementById('wlThematicAddAll');
     var thematicGrid = document.getElementById('wlThematicGrid');
+    var suggestEl = document.getElementById('wlSuggest');
+    var suggestTextEl = document.getElementById('wlSuggestText');
+    var suggestAcceptBtn = document.getElementById('wlSuggestAccept');
+    var suggestDismissBtn = document.getElementById('wlSuggestDismiss');
 
     // ── State ──
     var rows = [];
@@ -29,6 +44,9 @@
     var redoStack = [];
     var thematicWordsHidden = false;
     var currentThematicRows = [];
+    var _suggestAcceptFn = null;
+    var _suggestTimer = null;
+    var _suppressBlur = false;
 
     // ── Helpers ──
     function t(key, vars) {
@@ -37,10 +55,40 @@
     }
 
     function getPinyin(text) {
-        if (typeof pinyinPro !== 'undefined' && pinyinPro.pinyin) {
-            return pinyinPro.pinyin(text, { toneType: 'symbol', type: 'string' }).trim();
+        if (typeof pinyinPro === 'undefined' || !pinyinPro.pinyin) return '';
+        return text.replace(/[\u4e00-\u9fff\u3400-\u4dbf\uf900-\ufaff]+/g, function (m) {
+            var arr = pinyinPro.pinyin(m, { toneType: 'symbol', type: 'array' });
+            return arr.join('');
+        });
+    }
+
+    function applyToneMark(syllable, tone) {
+        if (tone < 1 || tone > 4) return syllable;
+        var s = syllable.toLowerCase().replace(/v/g, '\u00fc');
+        for (var i = 0; i < s.length; i++) {
+            if (s[i] === 'a' || s[i] === 'e') {
+                return s.substring(0, i) + TONE_MARKS[s[i]][tone - 1] + s.substring(i + 1);
+            }
         }
-        return '';
+        if (s.indexOf('ou') !== -1) {
+            var idx = s.indexOf('ou');
+            return s.substring(0, idx) + TONE_MARKS['o'][tone - 1] + s.substring(idx + 1);
+        }
+        for (var i = s.length - 1; i >= 0; i--) {
+            if (TONE_MARKS[s[i]]) {
+                return s.substring(0, i) + TONE_MARKS[s[i]][tone - 1] + s.substring(i + 1);
+            }
+        }
+        return s;
+    }
+
+    function normalizePinyinInput(str) {
+        var s = str.replace(/([1-4])([aeiou\u00fcv]*(ng|n(?![aeiou\u00fcv])|r(?![aeiou\u00fcv]))?)/gi, '$2$1');
+        s = s.replace(/([a-zA-Z\u00fc])[05]/g, '$1');
+        s = s.replace(/([a-zA-Z\u00fcv]+)([1-4])/g, function (m, syl, tone) {
+            return applyToneMark(syl, parseInt(tone));
+        });
+        return s;
     }
 
     function parseCsvLine(line) {
@@ -57,6 +105,47 @@
         return val;
     }
 
+    // ── Persistence ──
+    function persistRows() {
+        try { localStorage.setItem(STORAGE_KEY, JSON.stringify(rows)); } catch (e) { /* quota */ }
+    }
+
+    function loadPersistedRows() {
+        try {
+            var data = localStorage.getItem(STORAGE_KEY);
+            if (data) {
+                var parsed = JSON.parse(data);
+                if (Array.isArray(parsed)) return parsed;
+            }
+        } catch (e) { /* corrupt */ }
+        return [];
+    }
+
+    // ── Suggestion UI ──
+    function showSuggestion(targetEl, text, onAccept) {
+        if (!suggestEl || !suggestTextEl) return;
+        clearTimeout(_suggestTimer);
+        suggestTextEl.textContent = text;
+        _suggestAcceptFn = onAccept;
+        suggestEl.classList.remove('hidden');
+        var rect = targetEl.getBoundingClientRect();
+        suggestEl.style.top = (rect.bottom + 4) + 'px';
+        suggestEl.style.left = rect.left + 'px';
+    }
+
+    function showSuggestionDelayed(targetEl, text, onAccept) {
+        clearTimeout(_suggestTimer);
+        _suggestTimer = setTimeout(function () {
+            showSuggestion(targetEl, text, onAccept);
+        }, 100);
+    }
+
+    function hideSuggestion() {
+        clearTimeout(_suggestTimer);
+        if (suggestEl) suggestEl.classList.add('hidden');
+        _suggestAcceptFn = null;
+    }
+
     // ── Undo / Redo ──
     function saveSnapshot() {
         undoStack.push(JSON.stringify(rows));
@@ -67,18 +156,22 @@
 
     function undo() {
         if (undoStack.length === 0) return;
+        _suppressBlur = true;
         redoStack.push(JSON.stringify(rows));
         rows = JSON.parse(undoStack.pop());
         renderTable();
         syncUndoRedoButtons();
+        _suppressBlur = false;
     }
 
     function redo() {
         if (redoStack.length === 0) return;
+        _suppressBlur = true;
         undoStack.push(JSON.stringify(rows));
         rows = JSON.parse(redoStack.pop());
         renderTable();
         syncUndoRedoButtons();
+        _suppressBlur = false;
     }
 
     function syncUndoRedoButtons() {
@@ -115,28 +208,75 @@
 
         updateStats();
         dimThematicWords();
+        persistRows();
     }
 
     function makeInputCell(rowIdx, field) {
         var td = document.createElement('td');
-        var input = document.createElement('input');
-        input.type = 'text';
-        input.value = rows[rowIdx][field];
-        input.addEventListener('focus', function () {
+        var inp = document.createElement('input');
+        inp.type = 'text';
+        inp.value = rows[rowIdx][field];
+
+        inp.addEventListener('focus', function () {
             this._prev = this.value;
         });
-        input.addEventListener('blur', (function (ri, f) {
+
+        inp.addEventListener('blur', (function (ri, f, inputEl) {
             return function () {
-                if (this.value !== this._prev) {
+                if (_suppressBlur || ri >= rows.length) return;
+                var val = this.value;
+                if (val !== this._prev) {
                     saveSnapshot();
-                    rows[ri][f] = this.value;
+                    rows[ri][f] = val;
+                    persistRows();
+                }
+                if (f === 'word' && val && /[\u4e00-\u9fff]/.test(val)) {
+                    var newPinyin = getPinyin(val);
+                    if (newPinyin && newPinyin !== rows[ri].pinyin) {
+                        var tr = inputEl.parentElement.parentElement;
+                        var pinyinInput = tr.children[2] && tr.children[2].querySelector('input');
+                        showSuggestionDelayed(pinyinInput || inputEl,
+                            t('wl.suggestPinyin', { pinyin: newPinyin }),
+                            function () {
+                                saveSnapshot();
+                                rows[ri].pinyin = newPinyin;
+                                if (pinyinInput) pinyinInput.value = newPinyin;
+                                persistRows();
+                            });
+                    }
+                } else if (f === 'pinyin' && val) {
+                    var normalized = normalizePinyinInput(val);
+                    if (normalized !== val) {
+                        showSuggestionDelayed(inputEl,
+                            t('wl.suggestNormalize', { pinyin: normalized }),
+                            function () {
+                                saveSnapshot();
+                                rows[ri].pinyin = normalized;
+                                inputEl.value = normalized;
+                                persistRows();
+                            });
+                    }
                 }
             };
-        })(rowIdx, field));
-        input.addEventListener('keydown', function (e) {
-            if (e.key === 'Enter') { e.preventDefault(); this.blur(); }
+        })(rowIdx, field, inp));
+
+        inp.addEventListener('keydown', function (e) {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                this.blur();
+                var thisTd = this.parentElement;
+                var tr = thisTd.parentElement;
+                var colIdx = Array.prototype.indexOf.call(tr.children, thisTd);
+                var nextTr = tr.nextElementSibling;
+                if (nextTr) {
+                    var nextInput = nextTr.children[colIdx] &&
+                        nextTr.children[colIdx].querySelector('input');
+                    if (nextInput) nextInput.focus();
+                }
+            }
         });
-        td.appendChild(input);
+
+        td.appendChild(inp);
         return td;
     }
 
@@ -433,6 +573,8 @@
 
     // ── Init ──
     function init() {
+        rows = loadPersistedRows();
+
         if (addBtn) addBtn.addEventListener('click', addWordsFromInput);
         if (addInput) addInput.addEventListener('keydown', function (e) {
             if (e.key === 'Enter') { e.preventDefault(); addWordsFromInput(); }
@@ -463,6 +605,22 @@
         if (thematicToggle) thematicToggle.addEventListener('click', toggleThematicGrid);
         if (thematicAddAll) thematicAddAll.addEventListener('click', addAllThematic);
 
+        if (suggestAcceptBtn) suggestAcceptBtn.addEventListener('click', function () {
+            if (_suggestAcceptFn) _suggestAcceptFn();
+            hideSuggestion();
+        });
+        if (suggestDismissBtn) suggestDismissBtn.addEventListener('click', hideSuggestion);
+
+        if (wlTable) {
+            wlTable.addEventListener('input', hideSuggestion);
+        }
+
+        document.addEventListener('mousedown', function (e) {
+            if (suggestEl && !suggestEl.classList.contains('hidden') && !suggestEl.contains(e.target)) {
+                hideSuggestion();
+            }
+        });
+
         document.addEventListener('keydown', function (e) {
             if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
                 e.preventDefault();
@@ -485,7 +643,7 @@
 
         loadManifest();
         syncUndoRedoButtons();
-        updateStats();
+        renderTable();
     }
 
     if (document.readyState === 'loading') {

@@ -24,6 +24,36 @@
         </header>
 
         <div class="section">
+            <div class="wl-list-header">
+                <h2 data-i18n="wl.table">Word list</h2>
+                <div class="wl-toolbar">
+                    <button type="button" id="wlUndo" data-i18n="wl.undo" disabled>Undo</button>
+                    <button type="button" id="wlRedo" data-i18n="wl.redo" disabled>Redo</button>
+                    <button type="button" id="wlSort" data-i18n="wl.sort">Sort</button>
+                    <button type="button" id="wlDedup" data-i18n="wl.dedup">Deduplicate</button>
+                    <button type="button" id="wlExport" data-i18n="wl.exportCsv">Export CSV</button>
+                    <button type="button" id="wlImport" data-i18n="wl.importCsv">Import CSV</button>
+                    <button type="button" id="wlClear" data-i18n="wl.clearAll">Clear all</button>
+                </div>
+            </div>
+            <p id="wlStats" class="stats" data-i18n="wl.empty">No words yet. Add words below or import a CSV file.</p>
+            <div class="wl-table-wrap">
+                <table class="wl-table" id="wlTable">
+                    <thead>
+                        <tr>
+                            <th data-i18n="wl.colNum">#</th>
+                            <th data-i18n="wl.colWord">Word</th>
+                            <th data-i18n="wl.colPinyin">Pinyin</th>
+                            <th data-i18n="wl.colTranslation">Translation</th>
+                            <th data-i18n="wl.colActions">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="wlTableBody"></tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="section">
             <h2 data-i18n="wl.addWords">Add words</h2>
             <div class="wl-add-bar">
                 <input type="text" id="wlAddInput" data-i18n-placeholder="wl.addPlaceholder" placeholder="Enter Chinese words separated by commas or spaces">
@@ -42,38 +72,12 @@
             </div>
             <div id="wlThematicGrid" class="wl-thematic-grid hidden"></div>
         </div>
+    </div>
 
-        <div class="section">
-            <h2 data-i18n="wl.toolbar">Tools</h2>
-            <div class="wl-toolbar">
-                <button type="button" id="wlUndo" data-i18n="wl.undo" disabled>Undo</button>
-                <button type="button" id="wlRedo" data-i18n="wl.redo" disabled>Redo</button>
-                <button type="button" id="wlSort" data-i18n="wl.sort">Sort</button>
-                <button type="button" id="wlDedup" data-i18n="wl.dedup">Deduplicate</button>
-                <button type="button" id="wlExport" data-i18n="wl.exportCsv">Export CSV</button>
-                <button type="button" id="wlImport" data-i18n="wl.importCsv">Import CSV</button>
-                <button type="button" id="wlClear" data-i18n="wl.clearAll">Clear all</button>
-            </div>
-            <p id="wlStats" class="stats" data-i18n="wl.empty">No words yet. Add words above or import a CSV file.</p>
-        </div>
-
-        <div class="section">
-            <h2 data-i18n="wl.table">Word list</h2>
-            <div class="wl-table-wrap">
-                <table class="wl-table" id="wlTable">
-                    <thead>
-                        <tr>
-                            <th data-i18n="wl.colNum">#</th>
-                            <th data-i18n="wl.colWord">Word</th>
-                            <th data-i18n="wl.colPinyin">Pinyin</th>
-                            <th data-i18n="wl.colTranslation">Translation</th>
-                            <th data-i18n="wl.colActions">Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody id="wlTableBody"></tbody>
-                </table>
-            </div>
-        </div>
+    <div id="wlSuggest" class="wl-suggest hidden">
+        <span id="wlSuggestText"></span>
+        <button type="button" id="wlSuggestAccept" class="wl-suggest-btn wl-suggest-yes">&#x2713;</button>
+        <button type="button" id="wlSuggestDismiss" class="wl-suggest-btn wl-suggest-no">&#x2715;</button>
     </div>
 
     <input type="file" id="wlFileInput" accept=".csv,.txt" class="hidden-file-input" aria-hidden="true">

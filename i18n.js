@@ -204,11 +204,13 @@
             'wl.colPinyin': 'Pinyin',
             'wl.colTranslation': 'Translation',
             'wl.colActions': 'Actions',
-            'wl.empty': 'No words yet. Add words above or import a CSV file.',
+            'wl.empty': 'No words yet. Add words below or import a CSV file.',
             'wl.dedupResult': 'Removed {n} duplicate(s).',
             'wl.dedupNone': 'No duplicates found.',
             'wl.confirmClear': 'Remove all {n} words from the list?',
-            'wl.statsLine': '{n} word(s) in the list'
+            'wl.statsLine': '{n} word(s) in the list',
+            'wl.suggestPinyin': 'Update pinyin to \u201C{pinyin}\u201D?',
+            'wl.suggestNormalize': 'Normalize to \u201C{pinyin}\u201D?'
         },
         ru: {
             'lang.label': 'Язык',
@@ -409,11 +411,13 @@
             'wl.colPinyin': 'Пиньинь',
             'wl.colTranslation': 'Перевод',
             'wl.colActions': 'Действия',
-            'wl.empty': 'Слов пока нет. Добавьте слова выше или импортируйте CSV-файл.',
+            'wl.empty': 'Слов пока нет. Добавьте слова ниже или импортируйте CSV-файл.',
             'wl.dedupResult': 'Удалено дубликатов: {n}.',
             'wl.dedupNone': 'Дубликатов не найдено.',
             'wl.confirmClear': 'Удалить все {n} слов из списка?',
-            'wl.statsLine': 'Слов в списке: {n}'
+            'wl.statsLine': 'Слов в списке: {n}',
+            'wl.suggestPinyin': 'Обновить пиньинь на \u00AB{pinyin}\u00BB?',
+            'wl.suggestNormalize': 'Нормализовать до \u00AB{pinyin}\u00BB?'
         }
     };
 

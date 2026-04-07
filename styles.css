@@ -358,10 +358,24 @@ input[type="text"] {
     margin: 0;
 }
 
+.wl-list-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 10px;
+}
+
+.wl-list-header h2 {
+    margin: 0;
+}
+
 .wl-toolbar {
     display: flex;
     flex-wrap: wrap;
     gap: 8px;
+    justify-content: flex-end;
 }
 
 .wl-toolbar button {
@@ -472,6 +486,57 @@ input[type="text"] {
     margin: 0;
     min-width: 0;
     line-height: 1.4;
+}
+
+.wl-suggest {
+    position: fixed;
+    z-index: 1000;
+    background: #fffde7;
+    border: 1px solid #f0c040;
+    border-radius: 4px;
+    padding: 4px 8px;
+    font-size: 13px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}
+
+.wl-suggest.hidden {
+    display: none;
+}
+
+.wl-suggest-btn {
+    padding: 2px 8px;
+    margin: 0;
+    min-width: 0;
+    font-size: 14px;
+    font-weight: bold;
+    line-height: 1.4;
+    cursor: pointer;
+    border-radius: 3px;
+    border: 1px solid #ccc;
+    background: #fff;
+}
+
+.wl-suggest-yes {
+    color: #27ae60;
+    border-color: #27ae60;
+}
+
+.wl-suggest-yes:hover {
+    background: #27ae60;
+    color: #fff;
+}
+
+.wl-suggest-no {
+    color: #e74c3c;
+    border-color: #e74c3c;
+}
+
+.wl-suggest-no:hover {
+    background: #e74c3c;
+    color: #fff;
 }
 
 .hidden {
