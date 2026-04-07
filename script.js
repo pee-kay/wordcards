@@ -94,6 +94,14 @@ const wsSubmitBtn = document.getElementById('wsSubmit');
 const wsFeedback = document.getElementById('wsFeedback');
 const wsNextBtn = document.getElementById('wsNext');
 
+// Handwriting input elements
+const hwToggleBtn = document.getElementById('wsHandwriteToggle');
+const hwPanel = document.getElementById('wsHandwritePanel');
+const hwCanvasEl = document.getElementById('hwCanvas');
+const hwUndoBtn = document.getElementById('hwUndo');
+const hwClearBtn = document.getElementById('hwClear');
+const hwCandidatesEl = document.getElementById('hwCandidates');
+
 // Initialize the application
 function init() {
     // Event listeners for mode selection
@@ -133,6 +141,10 @@ function init() {
     if (wpNextBtn) wpNextBtn.addEventListener('click', nextPronunciationQuestion);
     if (wsSubmitBtn) wsSubmitBtn.addEventListener('click', checkSpellingAnswer);
     if (wsNextBtn) wsNextBtn.addEventListener('click', nextSpellingQuestion);
+
+    if (hwToggleBtn) hwToggleBtn.addEventListener('click', toggleHandwritePanel);
+    if (hwUndoBtn) hwUndoBtn.addEventListener('click', function () { if (_hwBoard) _hwBoard.undo(); });
+    if (hwClearBtn) hwClearBtn.addEventListener('click', function () { if (_hwBoard) _hwBoard.clear(); });
 
     if (wpAnswer) {
         wpAnswer.addEventListener('keydown', function (e) {
@@ -939,6 +951,196 @@ function buildPinyinDiff(userNorm, correctNorm) {
     }
 
     return html;
+}
+
+// ── Handwriting input (Google Input Tools API) ──
+var _hwBoard = null;
+
+var GOOGLE_HW_API = 'https://inputtools.google.com/request?ime=handwriting&app=wordcards';
+
+function toggleHandwritePanel() {
+    if (!hwPanel || !hwToggleBtn) return;
+    hwPanel.classList.toggle('hidden');
+    hwToggleBtn.classList.toggle('active');
+    if (!_hwBoard && hwCanvasEl) {
+        _hwBoard = createDrawingBoard(hwCanvasEl, onHwStrokeChange);
+    }
+}
+
+function onHwStrokeChange(strokes) {
+    if (!hwCandidatesEl) return;
+    hwCandidatesEl.innerHTML = '';
+    if (strokes.length === 0) return;
+
+    var ink = strokes.map(function (s) {
+        var xs = [], ys = [], ts = [];
+        for (var i = 0; i < s.length; i++) {
+            xs.push(s[i][0]);
+            ys.push(s[i][1]);
+            ts.push(s[i][2]);
+        }
+        return [xs, ys, ts];
+    });
+
+    var payload = JSON.stringify({
+        options: 'enable_pre_space',
+        requests: [{
+            writing_guide: { writing_area_width: 200, writing_area_height: 200 },
+            ink: ink,
+            language: 'zh',
+            max_num_results: 8,
+            max_completions: 0
+        }]
+    });
+
+    fetch(GOOGLE_HW_API, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: payload
+    })
+    .then(function (r) { return r.json(); })
+    .then(function (data) {
+        hwCandidatesEl.innerHTML = '';
+        if (data[0] !== 'SUCCESS' || !data[1] || !data[1][0]) return;
+        var chars = data[1][0][1] || [];
+        chars.forEach(function (ch) {
+            var btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'hw-candidate';
+            btn.textContent = ch;
+            btn.addEventListener('click', function () {
+                if (wsAnswer) {
+                    wsAnswer.value += ch;
+                    wsAnswer.focus();
+                }
+                if (_hwBoard) _hwBoard.clear();
+            });
+            hwCandidatesEl.appendChild(btn);
+        });
+    })
+    .catch(function () {});
+}
+
+function createDrawingBoard(canvas, onStrokeChange) {
+    var ctx = canvas.getContext('2d');
+    var strokes = [];
+    var currentStroke = null;
+    var drawing = false;
+    var strokeStart = 0;
+
+    function getPos(e) {
+        var rect = canvas.getBoundingClientRect();
+        var cx, cy;
+        if (e.touches && e.touches.length) {
+            cx = e.touches[0].clientX;
+            cy = e.touches[0].clientY;
+        } else {
+            cx = e.clientX;
+            cy = e.clientY;
+        }
+        return [
+            (cx - rect.left) * (canvas.width / rect.width),
+            (cy - rect.top) * (canvas.height / rect.height),
+            Date.now() - strokeStart
+        ];
+    }
+
+    function startStroke(e) {
+        drawing = true;
+        strokeStart = Date.now();
+        var p = getPos(e);
+        p[2] = 0;
+        currentStroke = [p];
+        ctx.strokeStyle = '#333';
+        ctx.lineWidth = 3;
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+        ctx.setLineDash([]);
+        ctx.beginPath();
+        ctx.moveTo(p[0], p[1]);
+    }
+
+    function continueStroke(e) {
+        if (!drawing) return;
+        var p = getPos(e);
+        currentStroke.push(p);
+        ctx.lineTo(p[0], p[1]);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(p[0], p[1]);
+    }
+
+    function endStroke() {
+        if (!drawing) return;
+        drawing = false;
+        if (currentStroke && currentStroke.length > 1) {
+            strokes.push(currentStroke);
+        }
+        currentStroke = null;
+        if (onStrokeChange) onStrokeChange(cloneStrokes());
+    }
+
+    function cloneStrokes() {
+        return strokes.map(function (s) {
+            return s.map(function (p) { return [p[0], p[1], p[2]]; });
+        });
+    }
+
+    function redraw() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        drawGuides();
+        ctx.strokeStyle = '#333';
+        ctx.lineWidth = 3;
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+        ctx.setLineDash([]);
+        for (var si = 0; si < strokes.length; si++) {
+            var s = strokes[si];
+            ctx.beginPath();
+            ctx.moveTo(s[0][0], s[0][1]);
+            for (var pi = 1; pi < s.length; pi++) {
+                ctx.lineTo(s[pi][0], s[pi][1]);
+            }
+            ctx.stroke();
+        }
+    }
+
+    function drawGuides() {
+        var w = canvas.width, h = canvas.height;
+        ctx.strokeStyle = '#ddd';
+        ctx.lineWidth = 0.5;
+        ctx.setLineDash([4, 4]);
+        ctx.beginPath();
+        ctx.moveTo(w / 2, 0); ctx.lineTo(w / 2, h);
+        ctx.moveTo(0, h / 2); ctx.lineTo(w, h / 2);
+        ctx.moveTo(0, 0); ctx.lineTo(w, h);
+        ctx.moveTo(w, 0); ctx.lineTo(0, h);
+        ctx.stroke();
+    }
+
+    canvas.addEventListener('mousedown', startStroke);
+    canvas.addEventListener('mousemove', continueStroke);
+    canvas.addEventListener('mouseup', endStroke);
+    canvas.addEventListener('mouseleave', function () { if (drawing) endStroke(); });
+    canvas.addEventListener('touchstart', function (e) { e.preventDefault(); startStroke(e); });
+    canvas.addEventListener('touchmove', function (e) { e.preventDefault(); continueStroke(e); });
+    canvas.addEventListener('touchend', function (e) { e.preventDefault(); endStroke(); });
+
+    drawGuides();
+
+    return {
+        cloneStrokes: cloneStrokes,
+        undo: function () {
+            strokes.pop();
+            redraw();
+            if (onStrokeChange) onStrokeChange(cloneStrokes());
+        },
+        clear: function () {
+            strokes = [];
+            redraw();
+            if (onStrokeChange) onStrokeChange(cloneStrokes());
+        }
+    };
 }
 
 // Initialize the application when the page loads

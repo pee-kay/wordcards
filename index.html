@@ -132,6 +132,17 @@
                     <div class="input-container">
                         <input type="text" id="wsAnswer" data-i18n-placeholder="ws.placeholder" placeholder="Write the word">
                         <button id="wsSubmit" data-i18n="ws.check">Check answer</button>
+                        <button type="button" id="wsHandwriteToggle" class="hw-toggle" data-i18n-title="ws.hwToggle" title="Handwriting input">&#9998;</button>
+                    </div>
+                    <div id="wsHandwritePanel" class="hw-panel hidden">
+                        <canvas id="hwCanvas" width="200" height="200"></canvas>
+                        <div class="hw-sidebar">
+                            <div class="hw-controls">
+                                <button type="button" id="hwUndo" class="hw-btn" data-i18n="ws.hwUndo">Undo</button>
+                                <button type="button" id="hwClear" class="hw-btn" data-i18n="ws.hwClear">Clear</button>
+                            </div>
+                            <div id="hwCandidates" class="hw-candidates"></div>
+                        </div>
                     </div>
                     <div class="feedback" id="wsFeedback"></div>
                     <button id="wsNext" data-i18n="ws.next">Next word</button>
