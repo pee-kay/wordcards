@@ -48,7 +48,13 @@
     var importAppendBtn = document.getElementById('wlImportAppend');
     var importCancelBtn = document.getElementById('wlImportCancel');
     var pinyinSuggestionsEl = document.getElementById('wlPinyinSuggestions');
+    var wlAddAllSuggestionsBtn = document.getElementById('wlAddAllSuggestions');
+    var wlClearAddInputBtn = document.getElementById('wlClearAddInput');
     var autoTranslateCheckbox = document.getElementById('wlAutoTranslate');
+    var wlToggleCsvView = document.getElementById('wlToggleCsvView');
+    var wlCsvEditor = document.getElementById('wlCsvEditor');
+    var wlTableWrap = document.getElementById('wlTableWrap');
+    var wlMissingMorphemesBtn = document.getElementById('wlMissingMorphemes');
 
     // ── State ──
     var rows = [];
@@ -56,6 +62,79 @@
     var redoStack = [];
     var thematicWordsHidden = false;
     var currentThematicRows = [];
+    var _wlCsvEditorMode = false;
+
+    var WL_HAN_REGEX = /[\u4e00-\u9fff\u3400-\u4dbf\uf900-\ufaff]/;
+
+    function wlWordCharCount(w) {
+        return Array.from(String(w || '')).length;
+    }
+
+    function wlRowIsExactSingleHanzi(word) {
+        var t = String(word || '').trim();
+        if (!t) return false;
+        if (Array.from(t).length !== 1) return false;
+        return WL_HAN_REGEX.test(t);
+    }
+
+    function buildMissingHanziMorphemesList() {
+        var existing = {};
+        for (var i = 0; i < rows.length; i++) {
+            var w = (rows[i].word || '').trim();
+            if (wlRowIsExactSingleHanzi(w)) {
+                existing[Array.from(w)[0]] = true;
+            }
+        }
+        var out = [];
+        var seen = {};
+        for (var j = 0; j < rows.length; j++) {
+            var word = rows[j].word || '';
+            var parts = Array.from(word);
+            for (var k = 0; k < parts.length; k++) {
+                var ch = parts[k];
+                if (!WL_HAN_REGEX.test(ch)) continue;
+                if (existing[ch]) continue;
+                if (seen[ch]) continue;
+                seen[ch] = true;
+                out.push(ch);
+            }
+        }
+        return out;
+    }
+
+    function syncWlCsvToggleLabel() {
+        if (!wlToggleCsvView) return;
+        wlToggleCsvView.textContent = t(_wlCsvEditorMode ? 'wl.viewAsTable' : 'wl.viewAsCsv');
+    }
+
+    function onWlToggleCsvView() {
+        if (!wlCsvEditor || !wlTableWrap) return;
+        if (_wlCsvEditorMode) {
+            var parsed = parseCsvText(wlCsvEditor.value);
+            saveSnapshot();
+            rows = parsed;
+            _wlCsvEditorMode = false;
+            wlCsvEditor.classList.add('hidden');
+            wlTableWrap.classList.remove('hidden');
+            syncWlCsvToggleLabel();
+            renderTable();
+        } else {
+            _wlCsvEditorMode = true;
+            wlCsvEditor.value = buildCsvText();
+            wlCsvEditor.classList.remove('hidden');
+            wlTableWrap.classList.add('hidden');
+            syncWlCsvToggleLabel();
+        }
+    }
+
+    function fillMissingMorphemesToAddInput() {
+        if (!addInput) return;
+        var list = buildMissingHanziMorphemesList();
+        addInput.value = list.join(', ');
+        clearTimeout(_pinyinDebounce);
+        updatePinyinSuggestions();
+    }
+
     var _suggestAcceptFn = null;
     var _suggestTimer = null;
     var _suppressBlur = false;
@@ -240,6 +319,14 @@
 
     // ── Render ──
     function renderTable() {
+        if (_wlCsvEditorMode && wlCsvEditor) {
+            wlCsvEditor.value = buildCsvText();
+            updateStats();
+            dimThematicWords();
+            dimPinyinSuggestionWords();
+            persistRows();
+            return;
+        }
         if (!tableBody) return;
         tableBody.innerHTML = '';
 
@@ -256,7 +343,9 @@
             }
 
             var tdNum = document.createElement('td');
+            tdNum.className = 'wl-row-handle';
             tdNum.textContent = i + 1;
+            tdNum.title = t('wl.rowHandleTitle');
             tr.appendChild(tdNum);
 
             tr.appendChild(makeInputCell(i, 'word'));
@@ -265,10 +354,13 @@
 
             var tdAct = document.createElement('td');
             tdAct.className = 'wl-actions';
-            tdAct.appendChild(makeActionBtn('\u2191', moveRowUp, i));
-            tdAct.appendChild(makeActionBtn('\u2193', moveRowDown, i));
-            tdAct.appendChild(makeActionBtn('\u29C9', duplicateRow, i));
-            tdAct.appendChild(makeActionBtn('\u2715', deleteRow, i));
+            var actInner = document.createElement('div');
+            actInner.className = 'wl-actions-inner';
+            actInner.appendChild(makeActionBtn('\u2191', moveRowUp, i));
+            actInner.appendChild(makeActionBtn('\u2193', moveRowDown, i));
+            actInner.appendChild(makeActionBtn('\u29C9', duplicateRow, i));
+            actInner.appendChild(makeActionBtn('\u2715', deleteRow, i));
+            tdAct.appendChild(actInner);
             tr.appendChild(tdAct);
 
             tableBody.appendChild(tr);
@@ -457,6 +549,152 @@
         renderTable();
     }
 
+    /** gapIdx 0..rows.length: insert before row gapIdx (n = after last). */
+    function applyRowDrop(fromIdx, gapIdx) {
+        if (fromIdx < 0 || fromIdx >= rows.length) return;
+        if (gapIdx < 0 || gapIdx > rows.length) return;
+        if (gapIdx === fromIdx || gapIdx === fromIdx + 1) return;
+        saveSnapshot();
+        var item = rows.splice(fromIdx, 1)[0];
+        var insertAt = gapIdx > fromIdx ? gapIdx - 1 : gapIdx;
+        rows.splice(insertAt, 0, item);
+        renderTable();
+    }
+
+    function wlDropGapFromClientY(clientY) {
+        if (!tableBody) return 0;
+        var trs = tableBody.querySelectorAll('tr');
+        if (trs.length === 0) return 0;
+        for (var i = 0; i < trs.length; i++) {
+            var r = trs[i].getBoundingClientRect();
+            var mid = r.top + r.height / 2;
+            if (clientY < mid) return i;
+        }
+        return trs.length;
+    }
+
+    var _wlRowDrag = null;
+
+    function wlDisposeRowDragUI() {
+        if (!_wlRowDrag) return;
+        document.removeEventListener('mousemove', _wlRowDrag.onMove, true);
+        document.removeEventListener('mouseup', _wlRowDrag.onUp, true);
+        document.removeEventListener('keydown', _wlRowDrag.onEsc, true);
+        if (_wlRowDrag.ghost && _wlRowDrag.ghost.parentNode) {
+            _wlRowDrag.ghost.parentNode.removeChild(_wlRowDrag.ghost);
+        }
+        if (_wlRowDrag.indicator && _wlRowDrag.indicator.parentNode) {
+            _wlRowDrag.indicator.parentNode.removeChild(_wlRowDrag.indicator);
+        }
+        document.body.classList.remove('wl-row-dragging');
+        _wlRowDrag = null;
+    }
+
+    function wlRowDragEscape(e) {
+        if (e.key !== 'Escape' || !_wlRowDrag) return;
+        e.preventDefault();
+        wlDisposeRowDragUI();
+    }
+
+    function wlLayoutDropIndicator(gapIdx) {
+        if (!_wlRowDrag || !wlTable || !tableBody) return;
+        var trs = tableBody.querySelectorAll('tr');
+        var ind = _wlRowDrag.indicator;
+        if (!trs.length) {
+            ind.style.display = 'none';
+            return;
+        }
+        var tableRect = wlTable.getBoundingClientRect();
+        var y;
+        if (gapIdx <= 0) {
+            y = trs[0].getBoundingClientRect().top;
+        } else if (gapIdx >= trs.length) {
+            y = trs[trs.length - 1].getBoundingClientRect().bottom;
+        } else {
+            y = trs[gapIdx].getBoundingClientRect().top;
+        }
+        ind.style.display = 'block';
+        ind.style.left = tableRect.left + 'px';
+        ind.style.width = tableRect.width + 'px';
+        ind.style.height = '3px';
+        ind.style.top = (y - 1.5) + 'px';
+    }
+
+    function wlRowDragMove(e) {
+        if (!_wlRowDrag) return;
+        e.preventDefault();
+        _wlRowDrag.ghost.style.left = (e.clientX - _wlRowDrag.offX) + 'px';
+        _wlRowDrag.ghost.style.top = (e.clientY - _wlRowDrag.offY) + 'px';
+        var gap = wlDropGapFromClientY(e.clientY);
+        _wlRowDrag.lastGap = gap;
+        wlLayoutDropIndicator(gap);
+    }
+
+    function wlRowDragUp(e) {
+        if (!_wlRowDrag) return;
+        if (e.button !== 0) return;
+        var fromIdx = _wlRowDrag.fromIdx;
+        var gap = _wlRowDrag.lastGap;
+        wlDisposeRowDragUI();
+        applyRowDrop(fromIdx, gap);
+    }
+
+    function wlRowHandleMouseDown(e) {
+        if (e.button !== 0) return;
+        var td = e.target.closest('td.wl-row-handle');
+        if (!td || !tableBody || !tableBody.contains(td)) return;
+        e.preventDefault();
+        var tr = td.parentElement;
+        var fromIdx = Array.prototype.indexOf.call(tableBody.children, tr);
+        if (fromIdx < 0) return;
+
+        var rect = td.getBoundingClientRect();
+        var ghost = td.cloneNode(true);
+        ghost.classList.add('wl-row-handle-ghost');
+        ghost.style.position = 'fixed';
+        ghost.style.left = rect.left + 'px';
+        ghost.style.top = rect.top + 'px';
+        ghost.style.width = rect.width + 'px';
+        ghost.style.height = rect.height + 'px';
+        ghost.style.margin = '0';
+        ghost.style.boxSizing = 'border-box';
+        ghost.style.pointerEvents = 'none';
+        ghost.style.zIndex = '10001';
+        document.body.appendChild(ghost);
+
+        var indicator = document.createElement('div');
+        indicator.className = 'wl-drop-indicator';
+        indicator.setAttribute('aria-hidden', 'true');
+        document.body.appendChild(indicator);
+
+        var gap0 = wlDropGapFromClientY(e.clientY);
+        _wlRowDrag = {
+            fromIdx: fromIdx,
+            ghost: ghost,
+            indicator: indicator,
+            offX: e.clientX - rect.left,
+            offY: e.clientY - rect.top,
+            lastGap: gap0,
+            onMove: wlRowDragMove,
+            onUp: wlRowDragUp,
+            onEsc: wlRowDragEscape
+        };
+        document.body.classList.add('wl-row-dragging');
+        wlLayoutDropIndicator(gap0);
+
+        document.addEventListener('mousemove', wlRowDragMove, true);
+        document.addEventListener('mouseup', wlRowDragUp, true);
+        document.addEventListener('keydown', wlRowDragEscape, true);
+    }
+
+    var _wlRowDragListenersBound = false;
+
+    function bindWlRowDragListeners() {
+        if (!tableBody || _wlRowDragListenersBound) return;
+        _wlRowDragListenersBound = true;
+        tableBody.addEventListener('mousedown', wlRowHandleMouseDown);
+    }
+
     function toggleSortMenu() {
         if (!sortMenu) return;
         sortMenu.classList.toggle('hidden');
@@ -487,6 +725,23 @@
                 if (ca !== cb) return ca - cb;
                 return (a.word || '').localeCompare(b.word || '', 'zh');
             });
+            break;
+        case 'pinyinSize':
+            rows.sort(function (a, b) {
+                var la = a.word.length, lb = b.word.length;
+                if (la !== lb) return la - lb;
+                return a.word.localeCompare(b.word, 'zh');
+            });
+            break;
+        case 'wordSizeStable':
+            rows.forEach(function (r, i) { r._wlOrd = i; });
+            rows.sort(function (a, b) {
+                var la = wlWordCharCount(a.word);
+                var lb = wlWordCharCount(b.word);
+                if (la !== lb) return la - lb;
+                return a._wlOrd - b._wlOrd;
+            });
+            rows.forEach(function (r) { delete r._wlOrd; });
             break;
         default:
             rows.sort(function (a, b) {
@@ -534,13 +789,29 @@
     }
 
     // ── CSV export / import ──
+    var WL_EXPORT_CSV_DEFAULT = 'wordlist.csv';
+
+    function sanitizeExportCsvFilename(raw) {
+        var s = String(raw != null ? raw : '').trim();
+        if (!s) return WL_EXPORT_CSV_DEFAULT;
+        s = s.replace(/^.*[/\\]/, '');
+        s = s.replace(/[<>:"|?*\x00-\x1f]/g, '_').trim();
+        if (!s || s === '.' || s === '..') return WL_EXPORT_CSV_DEFAULT;
+        if (s.length > 200) s = s.slice(0, 200);
+        if (!/\.csv$/i.test(s)) s += '.csv';
+        return s;
+    }
+
     function exportCsv() {
         if (rows.length === 0) return;
+        var entered = window.prompt(t('wl.exportCsvFilenamePrompt'), WL_EXPORT_CSV_DEFAULT);
+        if (entered === null) return;
+        var filename = sanitizeExportCsvFilename(entered);
         var text = buildCsvText();
         var blob = new Blob([text], { type: 'text/csv;charset=utf-8' });
         var a = document.createElement('a');
         a.href = URL.createObjectURL(blob);
-        a.download = 'wordlist.csv';
+        a.download = filename;
         a.click();
         URL.revokeObjectURL(a.href);
     }
@@ -647,6 +918,7 @@
         var text = addInput.value.trim();
         if (!text) {
             pinyinSuggestionsEl.innerHTML = '';
+            updateAddAllSuggestionsVisibility();
             return;
         }
 
@@ -655,6 +927,7 @@
 
         if (tokens.length === 0) {
             pinyinSuggestionsEl.innerHTML = '';
+            updateAddAllSuggestionsVisibility();
             return;
         }
 
@@ -701,6 +974,42 @@
             }
         }
 
+        dimPinyinSuggestionWords();
+    }
+
+    var WL_ADD_ALL_MIN_ROWS = 6;
+
+    function updateAddAllSuggestionsVisibility() {
+        if (!pinyinSuggestionsEl) return;
+        var rowCount = pinyinSuggestionsEl.querySelectorAll('.wl-pinyin-row').length;
+        var show = rowCount >= WL_ADD_ALL_MIN_ROWS;
+        if (wlAddAllSuggestionsBtn) wlAddAllSuggestionsBtn.classList.toggle('hidden', !show);
+        if (wlClearAddInputBtn) wlClearAddInputBtn.classList.toggle('hidden', !show);
+    }
+
+    function clearWlAddInput() {
+        if (!addInput) return;
+        addInput.value = '';
+        updatePinyinSuggestions();
+        addInput.focus();
+    }
+
+    function addAllFirstSuggestionsFromRows() {
+        if (!pinyinSuggestionsEl) return;
+        var prows = pinyinSuggestionsEl.querySelectorAll('.wl-pinyin-row');
+        var words = [];
+        for (var i = 0; i < prows.length; i++) {
+            var btn = prows[i].querySelector('.wl-thematic-word[data-wl-word]');
+            if (!btn) continue;
+            var w = btn.getAttribute('data-wl-word');
+            if (w) words.push(w);
+        }
+        if (words.length === 0) return;
+        saveSnapshot();
+        for (var j = 0; j < words.length; j++) {
+            addWordRow(words[j], getPinyin(words[j]), '');
+        }
+        renderTable();
         dimPinyinSuggestionWords();
     }
 
@@ -981,6 +1290,7 @@
             var should = !!(w && wordsInTable[w]);
             if (b.classList.contains('wl-in-table') !== should) b.classList.toggle('wl-in-table', should);
         }
+        updateAddAllSuggestionsVisibility();
     }
 
     var _thematicSylSet = null;
@@ -1379,6 +1689,10 @@
         if (copyBtn) copyBtn.addEventListener('click', copyToClipboard);
         if (pasteBtn) pasteBtn.addEventListener('click', loadFromClipboard);
         if (clearBtn) clearBtn.addEventListener('click', clearAll);
+        if (wlToggleCsvView) wlToggleCsvView.addEventListener('click', onWlToggleCsvView);
+        if (wlMissingMorphemesBtn) wlMissingMorphemesBtn.addEventListener('click', fillMissingMorphemesToAddInput);
+        if (wlAddAllSuggestionsBtn) wlAddAllSuggestionsBtn.addEventListener('click', addAllFirstSuggestionsFromRows);
+        if (wlClearAddInputBtn) wlClearAddInputBtn.addEventListener('click', clearWlAddInput);
 
         if (importBtn && fileInput) {
             importBtn.addEventListener('click', function () { fileInput.click(); });
@@ -1443,7 +1757,23 @@
             var opt0 = thematicSelect && thematicSelect.options[0];
             if (opt0 && opt0.value === '') opt0.textContent = t('wl.thematicSelect');
             applyThematicFilter();
+            if (tableBody) {
+                var rh = tableBody.querySelectorAll('td.wl-row-handle');
+                for (var ri = 0; ri < rh.length; ri++) {
+                    rh[ri].title = t('wl.rowHandleTitle');
+                }
+            }
+            syncWlCsvToggleLabel();
+            if (wlCsvEditor && wlCsvEditor.getAttribute('data-i18n-placeholder')) {
+                wlCsvEditor.placeholder = t('wl.csvEditorPlaceholder');
+            }
         });
+
+        bindWlRowDragListeners();
+        syncWlCsvToggleLabel();
+        if (wlCsvEditor && wlCsvEditor.getAttribute('data-i18n-placeholder')) {
+            wlCsvEditor.placeholder = t('wl.csvEditorPlaceholder');
+        }
 
         loadManifest();
         syncUndoRedoButtons();

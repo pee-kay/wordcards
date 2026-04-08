@@ -36,6 +36,7 @@
                             <button type="button" data-sort="pinyin" data-i18n="wl.sortPinyin">By pinyin</button>
                             <button type="button" data-sort="translation" data-i18n="wl.sortTranslation">By translation</button>
                             <button type="button" data-sort="radical" data-i18n="wl.sortRadical">By radical</button>
+                            <button type="button" data-sort="wordSizeStable" data-i18n="wl.sortWordSizeStable">By word length (keep order)</button>
                         </div>
                     </div>
                     <button type="button" id="wlExport" data-i18n="wl.exportCsv">Export CSV</button>
@@ -43,10 +44,12 @@
                     <button type="button" id="wlCopy" data-i18n="wl.copyClipboard">Copy to clipboard</button>
                     <button type="button" id="wlPaste" data-i18n="wl.loadClipboard">Load from clipboard</button>
                     <button type="button" id="wlClear" data-i18n="wl.clearAll">Clear all</button>
+                    <button type="button" id="wlToggleCsvView" data-i18n="wl.viewAsCsv">Edit as CSV</button>
                 </div>
             </div>
             <p id="wlStats" class="stats" data-i18n="wl.empty">No words yet. Add words below or import a CSV file.</p>
-            <div class="wl-table-wrap">
+            <textarea id="wlCsvEditor" class="wl-csv-editor hidden" spellcheck="false" data-i18n-placeholder="wl.csvEditorPlaceholder" placeholder="word,pinyin,translation — one row per line"></textarea>
+            <div id="wlTableWrap" class="wl-table-wrap">
                 <table class="wl-table" id="wlTable">
                     <thead>
                         <tr>
@@ -66,11 +69,16 @@
             <h2 data-i18n="wl.addWords">Add words</h2>
             <div class="wl-add-bar">
                 <input type="text" id="wlAddInput" data-i18n-placeholder="wl.addPlaceholder" placeholder="Enter Chinese words or pinyin separated by commas">
+                <button type="button" id="wlMissingMorphemes" data-i18n="wl.missingMorphemes">Missing morphemes</button>
             </div>
             <label class="wl-checkbox-label">
                 <input type="checkbox" id="wlAutoTranslate">
                 <span data-i18n="wl.autoTranslate">Auto-suggest English translations (CC-CEDICT)</span>
             </label>
+            <div class="wl-add-all-suggestions-wrap">
+                <button type="button" id="wlAddAllSuggestions" class="hidden" data-i18n="wl.addAllSuggestions">Add all</button>
+                <button type="button" id="wlClearAddInput" class="hidden" data-i18n="wl.clearAddInput">Clear</button>
+            </div>
             <div id="wlPinyinSuggestions" class="wl-pinyin-suggestions"></div>
         </div>
 
