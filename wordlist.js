@@ -59,6 +59,24 @@
     var _cedictDict = null;
     var _cedictLoading = false;
 
+    /** Incremental pinyin suggestions: avoid clearing rows when comma-separated token unchanged */
+    var _wlSuggestReqCounter = 0;
+    var WL_PINYIN_SLOT_COUNT = 10;
+    /** Max suggestions shown: fixed slots + extras appended after them */
+    var WL_PINYIN_MAX_SUGGEST = 20;
+
+    function wlPinyinRowClickHandler(e) {
+        var row = e.currentTarget;
+        var btn = e.target.closest('button.wl-thematic-word[data-wl-word]');
+        if (!btn || btn.disabled || !row.contains(btn)) return;
+        var word = btn.getAttribute('data-wl-word');
+        if (!word) return;
+        saveSnapshot();
+        addWordRow(word, getPinyin(word), '');
+        renderTable();
+        dimPinyinSuggestionWords();
+    }
+
     // ── Helpers ──
     function t(key, vars) {
         if (window.I18N && I18N.t) return I18N.t(key, vars);
@@ -623,35 +641,68 @@
     function updatePinyinSuggestions() {
         if (!pinyinSuggestionsEl || !addInput) return;
         var text = addInput.value.trim();
-        if (!text) { pinyinSuggestionsEl.innerHTML = ''; return; }
+        if (!text) {
+            pinyinSuggestionsEl.innerHTML = '';
+            return;
+        }
 
         var tokens = text.split(/[,，]/).map(function (s) { return s.trim(); })
             .filter(function (s) { return s.length > 0; });
 
-        if (tokens.length === 0) { pinyinSuggestionsEl.innerHTML = ''; return; }
+        if (tokens.length === 0) {
+            pinyinSuggestionsEl.innerHTML = '';
+            return;
+        }
 
-        pinyinSuggestionsEl.innerHTML = '';
+        var container = pinyinSuggestionsEl;
+        while (container.children.length > tokens.length) {
+            container.removeChild(container.lastElementChild);
+        }
+
         for (var i = 0; i < tokens.length; i++) {
-            var placeholder = document.createElement('div');
-            placeholder.className = 'wl-pinyin-row';
-            placeholder.dataset.token = tokens[i];
-            pinyinSuggestionsEl.appendChild(placeholder);
+            var token = tokens[i];
+            var type = classifyToken(token);
+            var row = container.children[i];
 
-            var type = classifyToken(tokens[i]);
+            if (
+                row &&
+                row.classList.contains('wl-pinyin-row') &&
+                row.getAttribute('data-wl-token') === token &&
+                row.getAttribute('data-wl-type') === type
+            ) {
+                continue;
+            }
+
+            if (!row) {
+                row = document.createElement('div');
+                row.className = 'wl-pinyin-row';
+                container.appendChild(row);
+            }
+
+            row.setAttribute('data-wl-token', token);
+            row.setAttribute('data-wl-type', type);
+            _wlSuggestReqCounter += 1;
+            row.setAttribute('data-wl-req', String(_wlSuggestReqCounter));
+
+            ensureWlPinyinRowShell(row, token);
+
             if (type === 'hanzi') {
-                renderChineseRow(tokens[i], placeholder);
+                renderChineseRow(token, row);
             } else if (type === 'pinyin') {
-                fetchPinyinCandidates(tokens[i], placeholder);
+                fetchPinyinCandidates(token, row);
             } else if (type === 'mixed') {
-                fetchMixedCandidates(tokens[i], placeholder);
+                fetchMixedCandidates(token, row);
+            } else {
+                applyWlPinyinCandidates(row, token, []);
             }
         }
+
+        dimPinyinSuggestionWords();
     }
 
-    function renderChineseRow(token, placeholder) {
-        var words = token.split(/\s+/).filter(function (s) { return s.length > 0; });
-        if (words.length === 0) return;
-        fillPinyinRow(placeholder, token, words);
+    function renderChineseRow(token, row) {
+        // One comma-segment of pure Hanzi is one phrase (spaces/punctuation stay inside one button).
+        applyWlPinyinCandidates(row, token, token.length ? [token] : []);
     }
 
     function preparePinyinQuery(token) {
@@ -660,9 +711,15 @@
         return { base: base, normalized: normalized, hasTones: normalized !== base };
     }
 
-    function fetchPinyinCandidates(token, placeholder) {
+    function fetchPinyinCandidates(token, row) {
         var q = preparePinyinQuery(token);
-        if (!q.base) return;
+        if (!q.base) {
+            applyWlPinyinCandidates(row, token, []);
+            dimPinyinSuggestionWords();
+            return;
+        }
+
+        var reqAttr = row ? row.getAttribute('data-wl-req') : null;
 
         var url = GOOGLE_PINYIN_API +
             '?text=' + encodeURIComponent(q.base) +
@@ -671,21 +728,39 @@
         fetch(url)
             .then(function (r) { return r.json(); })
             .then(function (data) {
-                if (!data || data[0] !== 'SUCCESS' || !data[1] || !data[1][0]) return;
+                if (!row || row.getAttribute('data-wl-token') !== token) return;
+                if (reqAttr !== null && row.getAttribute('data-wl-req') !== reqAttr) return;
+                if (!data || data[0] !== 'SUCCESS' || !data[1] || !data[1][0]) {
+                    applyWlPinyinCandidates(row, token, []);
+                    dimPinyinSuggestionWords();
+                    return;
+                }
                 var candidates = data[1][0][1] || [];
 
                 if (q.hasTones && candidates.length > 0) {
                     candidates = filterByTones(candidates, q.normalized);
                 }
 
-                fillPinyinRow(placeholder, token, candidates.slice(0, 10));
+                applyWlPinyinCandidates(row, token, candidates);
+                dimPinyinSuggestionWords();
             })
-            .catch(function () { /* network */ });
+            .catch(function () {
+                if (!row || row.getAttribute('data-wl-token') !== token) return;
+                if (reqAttr !== null && row.getAttribute('data-wl-req') !== reqAttr) return;
+                applyWlPinyinCandidates(row, token, []);
+                dimPinyinSuggestionWords();
+            });
     }
 
-    function fetchMixedCandidates(token, placeholder) {
+    function fetchMixedCandidates(token, row) {
         var segments = parseSegments(token);
-        if (segments.length === 0) return;
+        if (segments.length === 0) {
+            applyWlPinyinCandidates(row, token, []);
+            dimPinyinSuggestionWords();
+            return;
+        }
+
+        var reqAttr = row ? row.getAttribute('data-wl-req') : null;
 
         var pinyinParts = [];
         var hasPinyinTones = false;
@@ -700,7 +775,11 @@
             }
         }
         var baseQuery = pinyinParts.join('');
-        if (!baseQuery) return;
+        if (!baseQuery) {
+            applyWlPinyinCandidates(row, token, []);
+            dimPinyinSuggestionWords();
+            return;
+        }
 
         var expectedToned = '';
         if (hasPinyinTones) {
@@ -722,7 +801,13 @@
         fetch(url)
             .then(function (r) { return r.json(); })
             .then(function (data) {
-                if (!data || data[0] !== 'SUCCESS' || !data[1] || !data[1][0]) return;
+                if (!row || row.getAttribute('data-wl-token') !== token) return;
+                if (reqAttr !== null && row.getAttribute('data-wl-req') !== reqAttr) return;
+                if (!data || data[0] !== 'SUCCESS' || !data[1] || !data[1][0]) {
+                    applyWlPinyinCandidates(row, token, []);
+                    dimPinyinSuggestionWords();
+                    return;
+                }
                 var candidates = data[1][0][1] || [];
 
                 var filtered = [];
@@ -732,9 +817,15 @@
                     filtered.push(candidates[i]);
                 }
 
-                fillPinyinRow(placeholder, token, filtered.slice(0, 10));
+                applyWlPinyinCandidates(row, token, filtered);
+                dimPinyinSuggestionWords();
             })
-            .catch(function () { /* network */ });
+            .catch(function () {
+                if (!row || row.getAttribute('data-wl-token') !== token) return;
+                if (reqAttr !== null && row.getAttribute('data-wl-req') !== reqAttr) return;
+                applyWlPinyinCandidates(row, token, []);
+                dimPinyinSuggestionWords();
+            });
     }
 
     function matchesMixedTemplate(candidate, segments) {
@@ -767,45 +858,124 @@
         return result;
     }
 
-    function fillPinyinRow(row, label, candidates) {
-        if (!row || candidates.length === 0) {
-            if (row && row.parentNode) row.parentNode.removeChild(row);
-            return;
-        }
-
+    function buildWlPinyinRowShell(row, labelText) {
+        if (!row) return;
         row.innerHTML = '';
 
         var lbl = document.createElement('span');
         lbl.className = 'wl-pinyin-row-label';
-        lbl.textContent = label + ':';
+        lbl.textContent = labelText + ':';
         row.appendChild(lbl);
+
+        for (var s = 0; s < WL_PINYIN_SLOT_COUNT; s++) {
+            var slot = document.createElement('button');
+            slot.type = 'button';
+            slot.className = 'wl-thematic-word wl-pinyin-slot';
+            slot.disabled = true;
+            row.appendChild(slot);
+        }
+
+        var extras = document.createElement('span');
+        extras.className = 'wl-pinyin-extras';
+        row.appendChild(extras);
+
+        if (!row._wlPinyinClickBound) {
+            row._wlPinyinClickBound = true;
+            row.addEventListener('click', wlPinyinRowClickHandler);
+        }
+    }
+
+    /** Reuse DOM when structure already exists so stale suggestion buttons stay until fetch applies. */
+    function ensureWlPinyinRowShell(row, labelText) {
+        if (!row) return;
+        var lbl = row.querySelector('.wl-pinyin-row-label');
+        var slots = row.querySelectorAll('.wl-pinyin-slot');
+        var extras = row.querySelector('.wl-pinyin-extras');
+        if (lbl && slots.length === WL_PINYIN_SLOT_COUNT && extras) {
+            var next = labelText + ':';
+            if (lbl.textContent !== next) lbl.textContent = next;
+            if (!row._wlPinyinClickBound) {
+                row._wlPinyinClickBound = true;
+                row.addEventListener('click', wlPinyinRowClickHandler);
+            }
+            return;
+        }
+        buildWlPinyinRowShell(row, labelText);
+    }
+
+    function syncWlPinyinExtras(extras, list, wordsInTable) {
+        var need = Math.max(0, list.length - WL_PINYIN_SLOT_COUNT);
+        var i = 0;
+        for (; i < need; i++) {
+            var wx = list[WL_PINYIN_SLOT_COUNT + i];
+            var xb = extras.children[i];
+            if (!xb) {
+                xb = document.createElement('button');
+                xb.type = 'button';
+                xb.className = 'wl-thematic-word';
+                extras.appendChild(xb);
+            }
+            if (xb.textContent !== wx) xb.textContent = wx;
+            if (xb.getAttribute('data-wl-word') !== wx) xb.setAttribute('data-wl-word', wx);
+            if (xb.hidden) xb.hidden = false;
+            var xIn = !!wordsInTable[wx];
+            if (xb.classList.contains('wl-in-table') !== xIn) xb.classList.toggle('wl-in-table', xIn);
+        }
+        var ch = extras.children;
+        for (; i < ch.length; i++) {
+            var hid = ch[i];
+            if (!hid.hidden) hid.hidden = true;
+            if (hid.hasAttribute('data-wl-word')) hid.removeAttribute('data-wl-word');
+            if (hid.textContent !== '') hid.textContent = '';
+            if (hid.classList.contains('wl-in-table')) hid.classList.remove('wl-in-table');
+        }
+    }
+
+    function applyWlPinyinCandidates(row, token, candidates) {
+        if (!row) return;
+        var list = candidates && candidates.length
+            ? candidates.slice(0, WL_PINYIN_MAX_SUGGEST)
+            : [];
+
+        var lbl = row.querySelector('.wl-pinyin-row-label');
+        var nextLbl = token + ':';
+        if (lbl && lbl.textContent !== nextLbl) lbl.textContent = nextLbl;
+
+        var slots = row.querySelectorAll('.wl-pinyin-slot');
+        var extras = row.querySelector('.wl-pinyin-extras');
+        if (!extras || slots.length !== WL_PINYIN_SLOT_COUNT) return;
 
         var wordsInTable = buildWordSet();
 
-        for (var i = 0; i < candidates.length; i++) {
-            var btn = document.createElement('button');
-            btn.type = 'button';
-            btn.className = 'wl-thematic-word';
-            btn.textContent = candidates[i];
-            if (wordsInTable[candidates[i]]) btn.classList.add('wl-in-table');
-            btn.addEventListener('click', (function (word) {
-                return function () {
-                    saveSnapshot();
-                    addWordRow(word, getPinyin(word), '');
-                    renderTable();
-                    dimPinyinSuggestionWords();
-                };
-            })(candidates[i]));
-            row.appendChild(btn);
+        for (var i = 0; i < WL_PINYIN_SLOT_COUNT; i++) {
+            var btn = slots[i];
+            if (i < list.length) {
+                var w = list[i];
+                if (btn.textContent !== w) btn.textContent = w;
+                if (btn.getAttribute('data-wl-word') !== w) btn.setAttribute('data-wl-word', w);
+                if (btn.disabled) btn.disabled = false;
+                var inTable = !!wordsInTable[w];
+                if (btn.classList.contains('wl-in-table') !== inTable) btn.classList.toggle('wl-in-table', inTable);
+            } else {
+                if (btn.textContent !== '') btn.textContent = '';
+                if (btn.hasAttribute('data-wl-word')) btn.removeAttribute('data-wl-word');
+                if (!btn.disabled) btn.disabled = true;
+                if (btn.classList.contains('wl-in-table')) btn.classList.remove('wl-in-table');
+            }
         }
+
+        syncWlPinyinExtras(extras, list, wordsInTable);
     }
 
     function dimPinyinSuggestionWords() {
         if (!pinyinSuggestionsEl) return;
         var wordsInTable = buildWordSet();
-        var btns = pinyinSuggestionsEl.querySelectorAll('.wl-thematic-word');
+        var btns = pinyinSuggestionsEl.querySelectorAll('.wl-thematic-word[data-wl-word]');
         for (var i = 0; i < btns.length; i++) {
-            btns[i].classList.toggle('wl-in-table', !!wordsInTable[btns[i].textContent]);
+            var b = btns[i];
+            var w = b.getAttribute('data-wl-word');
+            var should = !!(w && wordsInTable[w]);
+            if (b.classList.contains('wl-in-table') !== should) b.classList.toggle('wl-in-table', should);
         }
     }
 
@@ -1045,6 +1215,19 @@
         loadManifest();
         syncUndoRedoButtons();
         renderTable();
+
+        if (addInput && addInput.value.trim()) {
+            updatePinyinSuggestions();
+        }
+        window.addEventListener('load', function () {
+            if (addInput && addInput.value.trim()) {
+                updatePinyinSuggestions();
+            }
+        });
+        window.addEventListener('pageshow', function (e) {
+            if (!e.persisted || !addInput || !addInput.value.trim()) return;
+            updatePinyinSuggestions();
+        });
     }
 
     if (document.readyState === 'loading') {
