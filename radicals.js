@@ -9,8 +9,8 @@
     /** Same dataset as Hanzi Writer; load via fetch to avoid broken parallel loads on HanziWriter.loadCharacterData (singleton LoadingManager). */
     const HANZI_WRITER_DATA_BASE = 'https://cdn.jsdelivr.net/npm/hanzi-writer-data@2.0';
 
-    const SVG_SIZE = 72;
-    const SVG_PADDING = Math.max(2, Math.round(SVG_SIZE * 0.08));
+    const SVG_VB = 200;
+    const SVG_PADDING = Math.max(1, Math.round(SVG_VB * 0.04));
 
     const charDataCache = new Map();
 
@@ -18,6 +18,7 @@
     const colsInput = document.getElementById('radicalCols');
     const hideModeSelect = document.getElementById('radicalHideMode');
     const shuffleCheck = document.getElementById('radicalShuffle');
+    const showPinyinCheck = document.getElementById('radicalShowPinyin');
     const answerKeyCheck = document.getElementById('radicalAnswerKey');
     const buildBtn = document.getElementById('radicalBuild');
     const statsEl = document.getElementById('radicalStats');
@@ -203,16 +204,42 @@
         return { hidden: new Set(indices.slice(0, pickCount)), radicalFallback: false };
     }
 
-    function renderPartialCharacterSvg(charData, hiddenStrokeIndices, width, height, padding) {
+    function appendTianZiGeOverlay(host) {
+        const NS = 'http://www.w3.org/2000/svg';
+        const svg = document.createElementNS(NS, 'svg');
+        svg.setAttribute('class', 'tian-zi-ge-overlay');
+        svg.setAttribute('viewBox', '0 0 100 100');
+        svg.setAttribute('preserveAspectRatio', 'none');
+        svg.setAttribute('aria-hidden', 'true');
+        const strokeColor = 'rgba(45, 55, 72, 0.13)';
+        const sw = 0.55;
+        function addLine(x1, y1, x2, y2) {
+            const line = document.createElementNS(NS, 'line');
+            line.setAttribute('x1', String(x1));
+            line.setAttribute('y1', String(y1));
+            line.setAttribute('x2', String(x2));
+            line.setAttribute('y2', String(y2));
+            line.setAttribute('stroke', strokeColor);
+            line.setAttribute('stroke-width', String(sw));
+            svg.appendChild(line);
+        }
+        addLine(0, 50, 100, 50);
+        addLine(50, 0, 50, 100);
+        addLine(0, 0, 100, 100);
+        addLine(100, 0, 0, 100);
+        host.insertBefore(svg, host.firstChild);
+    }
+
+    function renderPartialCharacterSvg(charData, hiddenStrokeIndices, vb, padding) {
         const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-        svg.setAttribute('width', String(width));
-        svg.setAttribute('height', String(height));
-        svg.setAttribute('viewBox', `0 0 ${width} ${height}`);
+        svg.setAttribute('width', '100%');
+        svg.setAttribute('height', '100%');
+        svg.setAttribute('viewBox', `0 0 ${vb} ${vb}`);
         svg.setAttribute('overflow', 'visible');
 
         const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
         if (typeof HanziWriter !== 'undefined' && HanziWriter.getScalingTransform) {
-            const transformData = HanziWriter.getScalingTransform(width, height, padding);
+            const transformData = HanziWriter.getScalingTransform(vb, vb, padding);
             g.setAttributeNS(null, 'transform', transformData.transform);
         }
         svg.appendChild(g);
@@ -236,7 +263,7 @@
         const ctx = canvas.getContext('2d');
         if (!ctx) return '';
 
-        const fontPx = Math.round(size * 0.72);
+        const fontPx = Math.round(size * 0.84);
         ctx.fillStyle = '#1a1a1a';
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
@@ -298,7 +325,7 @@
         const ctx = canvas.getContext('2d');
         if (!ctx) return '';
 
-        const fontPx = Math.round(size * 0.72);
+        const fontPx = Math.round(size * 0.84);
         ctx.fillStyle = '#1a1a1a';
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
@@ -381,8 +408,8 @@
             if (radicalFallback) radicalListFallback += 1;
 
             const emptyHidden = new Set();
-            const svg = renderPartialCharacterSvg(data, hidden, SVG_SIZE, SVG_SIZE, SVG_PADDING);
-            const answerSvg = renderPartialCharacterSvg(data, emptyHidden, SVG_SIZE, SVG_SIZE, SVG_PADDING);
+            const svg = renderPartialCharacterSvg(data, hidden, SVG_VB, SVG_PADDING);
+            const answerSvg = renderPartialCharacterSvg(data, emptyHidden, SVG_VB, SVG_PADDING);
             return {
                 char: ch,
                 pinyin: pinyinList[i],
@@ -398,51 +425,86 @@
     function renderGrid(container, cells, cols, mode) {
         container.innerHTML = '';
         container.style.setProperty('--radical-cols', String(cols));
+        const showPy = showPinyinCheck && showPinyinCheck.checked;
 
         for (const cell of cells) {
-            const wrap = document.createElement('div');
-            wrap.className = 'radical-cell';
+            const outer = document.createElement('div');
+            outer.className = 'radical-cell-wrapper';
+
+            const cellBox = document.createElement('div');
+            cellBox.className = 'radical-cell';
+            appendTianZiGeOverlay(cellBox);
+
+            const inner = document.createElement('div');
+            inner.className = 'radical-cell-inner';
 
             if (mode === 'exercise') {
                 if (cell.exerciseKind === 'svg' && cell.exerciseSvg) {
                     const holder = document.createElement('div');
                     holder.className = 'radical-char-svg-wrap';
                     holder.appendChild(cell.exerciseSvg);
-                    wrap.appendChild(holder);
+                    inner.appendChild(holder);
                 } else if (cell.exerciseKind === 'canvas' && cell.canvasSrc) {
                     const img = document.createElement('img');
                     img.className = 'radical-char-img';
                     img.src = cell.canvasSrc;
                     img.alt = t('radicals.imgAlt');
-                    wrap.appendChild(img);
+                    inner.appendChild(img);
                 }
             } else {
                 if (cell.exerciseKind === 'svg' && cell.answerSvg) {
                     const holder = document.createElement('div');
                     holder.className = 'radical-char-svg-wrap';
                     holder.appendChild(cell.answerSvg);
-                    wrap.appendChild(holder);
+                    inner.appendChild(holder);
                 } else if (cell.answerCanvasSrc) {
                     const img = document.createElement('img');
                     img.className = 'radical-char-img';
                     img.src = cell.answerCanvasSrc;
                     img.alt = cell.char;
-                    wrap.appendChild(img);
+                    inner.appendChild(img);
                 } else {
                     const glyph = document.createElement('div');
                     glyph.className = 'radical-char-full';
                     glyph.textContent = cell.char;
-                    wrap.appendChild(glyph);
+                    inner.appendChild(glyph);
                 }
             }
 
-            const py = document.createElement('div');
-            py.className = 'radical-pinyin';
-            py.textContent = cell.pinyin;
-            wrap.appendChild(py);
+            cellBox.appendChild(inner);
+            outer.appendChild(cellBox);
 
-            container.appendChild(wrap);
+            if (showPy) {
+                const py = document.createElement('div');
+                py.className = 'radical-pinyin radical-cell-label';
+                py.textContent = cell.pinyin;
+                outer.appendChild(py);
+            }
+
+            container.appendChild(outer);
         }
+    }
+
+    let lastRadicalCells = null;
+    let lastRadicalCols = 10;
+
+    function refreshRadicalLabelsOnly() {
+        if (!lastRadicalCells || !gridExercise || !gridAnswers) return;
+        renderGrid(gridExercise, lastRadicalCells, lastRadicalCols, 'exercise');
+        renderGrid(gridAnswers, lastRadicalCells, lastRadicalCols, 'answers');
+        updateAnswerSheetVisibility();
+    }
+
+    function debounce(fn, ms) {
+        let tid;
+        return function () {
+            const ctx = this;
+            const args = arguments;
+            clearTimeout(tid);
+            tid = setTimeout(function () {
+                fn.apply(ctx, args);
+            }, ms);
+        };
     }
 
     function updateAnswerSheetVisibility() {
@@ -464,6 +526,7 @@
             statsEl.textContent = t('radicals.statsNone');
             gridExercise.innerHTML = '';
             gridAnswers.innerHTML = '';
+            lastRadicalCells = null;
             return;
         }
 
@@ -473,6 +536,7 @@
             statsEl.textContent = t('radicals.statsNoHanzi');
             gridExercise.innerHTML = '';
             gridAnswers.innerHTML = '';
+            lastRadicalCells = null;
             return;
         }
 
@@ -498,7 +562,7 @@
             }
         }
 
-        const cols = Math.min(12, Math.max(2, parseInt(colsInput.value, 10) || 6));
+        const cols = Math.min(12, Math.max(2, parseInt(colsInput.value, 10) || 10));
         colsInput.value = String(cols);
 
         let mode = hideModeSelect ? hideModeSelect.value : 'radical';
@@ -540,6 +604,8 @@
                 showWarning(warnParts.join(' '));
             }
 
+            lastRadicalCells = cells;
+            lastRadicalCols = cols;
             renderGrid(gridExercise, cells, cols, 'exercise');
             renderGrid(gridAnswers, cells, cols, 'answers');
 
@@ -613,8 +679,38 @@
 
     answerKeyCheck.addEventListener('change', updateAnswerSheetVisibility);
 
+    if (showPinyinCheck) {
+        showPinyinCheck.addEventListener('change', function () {
+            refreshRadicalLabelsOnly();
+        });
+    }
+
     if (hideModeSelect) {
         hideModeSelect.addEventListener('change', async function () {
+            if (wordInput.value.trim()) {
+                await runBuild();
+            }
+        });
+    }
+
+    const debouncedRadicalBuild = debounce(function () {
+        if (wordInput.value.trim()) {
+            runBuild();
+        }
+    }, 450);
+
+    if (wordInput) {
+        wordInput.addEventListener('input', debouncedRadicalBuild);
+    }
+    if (colsInput) {
+        colsInput.addEventListener('change', async function () {
+            if (wordInput.value.trim()) {
+                await runBuild();
+            }
+        });
+    }
+    if (shuffleCheck) {
+        shuffleCheck.addEventListener('change', async function () {
             if (wordInput.value.trim()) {
                 await runBuild();
             }

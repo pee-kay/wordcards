@@ -9,9 +9,12 @@
     const HANZI_WRITER_DATA_BASE = 'https://cdn.jsdelivr.net/npm/hanzi-writer-data@2.0';
 
     const wordInput = document.getElementById('strokeWordInput');
-    const stepsPerRowInput = document.getElementById('strokeStepsPerRow');
-    const stepSizeInput = document.getElementById('strokeStepSize');
-    const showPinyinCheck = document.getElementById('strokeShowPinyin');
+    const gridColsInput = document.getElementById('strokeGridCols');
+    const showMetaCheck = document.getElementById('strokeShowMeta');
+    const showStepNumbersCheck = document.getElementById('strokeShowStepNumbers');
+    const practiceRowsCheck = document.getElementById('strokePracticeRows');
+    const practiceRowsCountInput = document.getElementById('strokePracticeRowsCount');
+    const practiceCountField = document.querySelector('.stroke-practice-count-field');
     const buildBtn = document.getElementById('strokeBuild');
     const statsEl = document.getElementById('strokeStats');
     const warningEl = document.getElementById('strokeWarning');
@@ -137,6 +140,76 @@
         return chars.map((_, i) => byCharIndex[i] || '?');
     }
 
+    function formatWordMeta(card) {
+        const hanzi = [];
+        for (const ch of card.word) {
+            if (isCjkChar(ch)) hanzi.push(ch);
+        }
+        if (hanzi.length === 0) {
+            return { pinyin: '', meaning: '' };
+        }
+        const aligned = alignPinyinFromCard(card.word, card.pronunciation);
+        let pinyin = '';
+        if (aligned && aligned.length === hanzi.length) {
+            pinyin = aligned.join(' ');
+        } else {
+            const fn = getPinyinFn();
+            if (fn) {
+                pinyin = hanzi.map(function (c) {
+                    return fn(c);
+                }).join('');
+            }
+        }
+        const meaning = (card.meaning || '').trim();
+        return { pinyin: pinyin.trim(), meaning: meaning };
+    }
+
+    function getStrokesPreviewContentWidth() {
+        const sec = document.getElementById('strokePreviewSection');
+        if (!sec) return 640;
+        const pr = sec.querySelector('.print-root');
+        const w = pr ? pr.clientWidth : sec.clientWidth;
+        return Math.max(200, w - 8);
+    }
+
+    function appendTianZiGeOverlay(host) {
+        const NS = 'http://www.w3.org/2000/svg';
+        const svg = document.createElementNS(NS, 'svg');
+        svg.setAttribute('class', 'tian-zi-ge-overlay');
+        svg.setAttribute('viewBox', '0 0 100 100');
+        svg.setAttribute('preserveAspectRatio', 'none');
+        svg.setAttribute('aria-hidden', 'true');
+        const strokeColor = 'rgba(45, 55, 72, 0.13)';
+        const sw = 0.55;
+        function addLine(x1, y1, x2, y2) {
+            const line = document.createElementNS(NS, 'line');
+            line.setAttribute('x1', String(x1));
+            line.setAttribute('y1', String(y1));
+            line.setAttribute('x2', String(x2));
+            line.setAttribute('y2', String(y2));
+            line.setAttribute('stroke', strokeColor);
+            line.setAttribute('stroke-width', String(sw));
+            svg.appendChild(line);
+        }
+        addLine(0, 50, 100, 50);
+        addLine(50, 0, 50, 100);
+        addLine(0, 0, 100, 100);
+        addLine(100, 0, 0, 100);
+        host.insertBefore(svg, host.firstChild);
+    }
+
+    function debounce(fn, ms) {
+        let tid;
+        return function () {
+            const ctx = this;
+            const args = arguments;
+            clearTimeout(tid);
+            tid = setTimeout(function () {
+                fn.apply(ctx, args);
+            }, ms);
+        };
+    }
+
     function showWarning(msg) {
         warningEl.textContent = msg;
         warningEl.classList.remove('hidden');
@@ -150,17 +223,17 @@
         loadingEl.classList.toggle('hidden', !on);
     }
 
-    function renderStrokeSvg(strokes, width, height, padding) {
+    function renderStrokeSvg(strokes, size, padding) {
         const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-        svg.setAttribute('width', String(width));
-        svg.setAttribute('height', String(height));
-        svg.setAttribute('viewBox', `0 0 ${width} ${height}`);
+        svg.setAttribute('width', '100%');
+        svg.setAttribute('height', '100%');
+        svg.setAttribute('viewBox', `0 0 ${size} ${size}`);
         svg.setAttribute('overflow', 'visible');
         svg.classList.add('stroke-step-svg-el');
 
         const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
         if (typeof HanziWriter !== 'undefined' && HanziWriter.getScalingTransform) {
-            const transformData = HanziWriter.getScalingTransform(width, height, padding);
+            const transformData = HanziWriter.getScalingTransform(size, size, padding);
             g.setAttributeNS(null, 'transform', transformData.transform);
         }
         svg.appendChild(g);
@@ -188,6 +261,119 @@
         }
     }
 
+    function appendStrokeStepCell(
+        parent,
+        charData,
+        strokeEndIndex,
+        stepSize,
+        padding,
+        showStepNumbers,
+        stepNumberLabel
+    ) {
+        const wrap = document.createElement('div');
+        wrap.className =
+            'stroke-step-wrap' + (showStepNumbers ? '' : ' stroke-step-wrap--no-num');
+
+        const step = document.createElement('div');
+        step.className = 'stroke-step';
+        appendTianZiGeOverlay(step);
+
+        const inner = document.createElement('div');
+        inner.className = 'stroke-step-inner';
+        const svgBox = document.createElement('div');
+        svgBox.className = 'stroke-step-svg-wrap';
+        const portion = charData.strokes.slice(0, strokeEndIndex + 1);
+        svgBox.appendChild(renderStrokeSvg(portion, stepSize, padding));
+        inner.appendChild(svgBox);
+        step.appendChild(inner);
+        wrap.appendChild(step);
+
+        const num = document.createElement('span');
+        num.className = 'stroke-step-num';
+        num.textContent = showStepNumbers ? String(stepNumberLabel) : '\u00a0';
+        wrap.appendChild(num);
+
+        parent.appendChild(wrap);
+    }
+
+    function appendEmptyStrokeCell(parent) {
+        const wrap = document.createElement('div');
+        wrap.className = 'stroke-step-wrap stroke-step-wrap--no-num';
+        const step = document.createElement('div');
+        step.className = 'stroke-step stroke-step--empty';
+        appendTianZiGeOverlay(step);
+        const inner = document.createElement('div');
+        inner.className = 'stroke-step-inner';
+        step.appendChild(inner);
+        wrap.appendChild(step);
+        const num = document.createElement('span');
+        num.className = 'stroke-step-num';
+        num.textContent = '\u00a0';
+        wrap.appendChild(num);
+        parent.appendChild(wrap);
+    }
+
+    function appendStepsGridForCharacter(
+        parent,
+        charData,
+        cols,
+        stepSize,
+        padding,
+        showStepNumbers,
+        practiceEnabled,
+        practiceRowCount,
+        totalStepsRef
+    ) {
+        const section = document.createElement('div');
+        section.className = 'stroke-character-section';
+
+        const stepsWrap = document.createElement('div');
+        stepsWrap.className = 'stroke-steps';
+        stepsWrap.style.setProperty('--stroke-grid-cols', String(cols));
+
+        const n = charData.strokes.length;
+        const stepRows = Math.ceil(n / cols);
+
+        const items = [];
+        for (let i = 0; i < n; i++) {
+            items.push({ type: 'step', strokeIndex: i });
+        }
+        const rem = n % cols;
+        if (rem !== 0) {
+            for (let k = 0; k < cols - rem; k++) {
+                items.push({ type: 'empty' });
+            }
+        }
+        if (practiceEnabled) {
+            const practiceFullRowCount = practiceRowCount * stepRows;
+            for (let r = 0; r < practiceFullRowCount; r++) {
+                for (let c = 0; c < cols; c++) {
+                    items.push({ type: 'empty' });
+                }
+            }
+        }
+
+        items.forEach(function (item) {
+            if (item.type === 'step') {
+                appendStrokeStepCell(
+                    stepsWrap,
+                    charData,
+                    item.strokeIndex,
+                    stepSize,
+                    padding,
+                    showStepNumbers,
+                    item.strokeIndex + 1
+                );
+                totalStepsRef.n += 1;
+            } else {
+                appendEmptyStrokeCell(stepsWrap);
+            }
+        });
+
+        section.appendChild(stepsWrap);
+        parent.appendChild(section);
+    }
+
     async function runBuild() {
         hideWarning();
         printRoot.innerHTML = '';
@@ -212,22 +398,32 @@
             return;
         }
 
-        const pinyinList = buildPinyinList(cards, chars);
-        const hasQuestion = pinyinList.some((p) => p === '?');
+        const hasQuestion = buildPinyinList(cards, chars).some((p) => p === '?');
         const noLib = !getPinyinFn();
         const warnParts = [];
         if (hasQuestion && noLib) {
             warnParts.push(t('strokes.warnPinyin'));
         }
 
-        const stepsPerRow = Math.min(24, Math.max(4, parseInt(stepsPerRowInput.value, 10) || 8));
-        stepsPerRowInput.value = String(stepsPerRow);
+        const cols = Math.min(24, Math.max(2, parseInt(gridColsInput.value, 10) || 10));
+        if (gridColsInput) gridColsInput.value = String(cols);
 
-        const stepSize = Math.min(120, Math.max(40, parseInt(stepSizeInput.value, 10) || 64));
-        stepSizeInput.value = String(stepSize);
+        const gap = 10;
+        const usable = getStrokesPreviewContentWidth() - gap * (cols - 1);
+        let stepSize = Math.floor(usable / cols) - 3;
+        stepSize = Math.min(200, Math.max(32, stepSize));
+        const padding = Math.max(1, Math.round(stepSize * 0.04));
 
-        const padding = Math.max(2, Math.round(stepSize * 0.08));
-        const showPinyin = showPinyinCheck.checked;
+        const showMeta = showMetaCheck && showMetaCheck.checked;
+        const showStepNumbers = showStepNumbersCheck && showStepNumbersCheck.checked;
+        const practiceEnabled = practiceRowsCheck && practiceRowsCheck.checked;
+        const practiceRowCount = Math.min(
+            12,
+            Math.max(1, parseInt(practiceRowsCountInput && practiceRowsCountInput.value, 10) || 2)
+        );
+        if (practiceRowsCountInput && practiceEnabled) {
+            practiceRowsCountInput.value = String(practiceRowCount);
+        }
 
         const unique = [...new Set(chars)];
         setLoading(true);
@@ -268,70 +464,95 @@
             showWarning(warnParts.join(' '));
         }
 
-        let totalSteps = 0;
+        const totalStepsRef = { n: 0 };
         const frag = document.createDocumentFragment();
 
-        chars.forEach((ch, idx) => {
-            const charData = dataMap.get(ch);
+        cards.forEach(function (card) {
+            const wordChars = [];
+            for (const ch of card.word) {
+                if (isCjkChar(ch)) wordChars.push(ch);
+            }
+            if (wordChars.length === 0) return;
+
             const block = document.createElement('div');
             block.className = 'stroke-char-block';
 
             const head = document.createElement('div');
             head.className = 'stroke-char-head';
+
             const title = document.createElement('span');
             title.className = 'stroke-char-title-glyph';
-            title.textContent = ch;
+            title.textContent = wordChars.join('');
             head.appendChild(title);
-            if (showPinyin) {
-                const py = document.createElement('span');
-                py.className = 'stroke-char-title-pinyin';
-                py.textContent = pinyinList[idx] || '';
-                head.appendChild(py);
-            }
-            block.appendChild(head);
 
-            if (!charData || !charData.strokes.length) {
+            if (showMeta) {
+                const meta = formatWordMeta(card);
+                if (meta.pinyin || meta.meaning) {
+                    const metaEl = document.createElement('span');
+                    metaEl.className = 'stroke-char-title-meta';
+                    if (meta.pinyin) {
+                        const pEl = document.createElement('span');
+                        pEl.className = 'stroke-char-title-pinyin';
+                        pEl.textContent = meta.pinyin;
+                        metaEl.appendChild(pEl);
+                    }
+                    if (meta.meaning) {
+                        if (meta.pinyin) {
+                            const sep = document.createElement('span');
+                            sep.className = 'stroke-char-title-sep';
+                            sep.textContent = ' · ';
+                            metaEl.appendChild(sep);
+                        }
+                        const mEl = document.createElement('span');
+                        mEl.className = 'stroke-char-title-meaning';
+                        mEl.textContent = meta.meaning;
+                        metaEl.appendChild(mEl);
+                    }
+                    head.appendChild(metaEl);
+                }
+            }
+
+            const missing = wordChars.filter(function (ch) {
+                const d = dataMap.get(ch);
+                return !d || !d.strokes || !d.strokes.length;
+            });
+            if (missing.length > 0) {
                 const miss = document.createElement('div');
                 miss.className = 'stroke-char-missing';
-                miss.textContent = t('strokes.missingData');
+                miss.textContent = t('strokes.missingData') + ': ' + missing.join(' ');
+                block.appendChild(head);
                 block.appendChild(miss);
                 frag.appendChild(block);
                 return;
             }
 
-            const stepsWrap = document.createElement('div');
-            stepsWrap.className = 'stroke-steps';
-            stepsWrap.style.setProperty('--stroke-steps-cols', String(stepsPerRow));
-            const cellMinPx = Math.ceil(stepSize + 20);
-            stepsWrap.style.setProperty('--stroke-step-min', `${cellMinPx}px`);
+            const body = document.createElement('div');
+            body.className = 'stroke-word-body';
 
-            const n = charData.strokes.length;
-            for (let i = 0; i < n; i++) {
-                const portion = charData.strokes.slice(0, i + 1);
-                const step = document.createElement('div');
-                step.className = 'stroke-step';
-
-                const svgBox = document.createElement('div');
-                svgBox.className = 'stroke-step-svg-wrap';
-                svgBox.appendChild(renderStrokeSvg(portion, stepSize, stepSize, padding));
-                step.appendChild(svgBox);
-
-                const num = document.createElement('span');
-                num.className = 'stroke-step-num';
-                num.textContent = String(i + 1);
-                step.appendChild(num);
-
-                stepsWrap.appendChild(step);
-                totalSteps += 1;
+            for (let ci = 0; ci < wordChars.length; ci++) {
+                const ch = wordChars[ci];
+                const charData = dataMap.get(ch);
+                appendStepsGridForCharacter(
+                    body,
+                    charData,
+                    cols,
+                    stepSize,
+                    padding,
+                    showStepNumbers,
+                    practiceEnabled,
+                    practiceRowCount,
+                    totalStepsRef
+                );
             }
 
-            block.appendChild(stepsWrap);
+            block.appendChild(head);
+            block.appendChild(body);
             frag.appendChild(block);
         });
 
         printRoot.appendChild(frag);
 
-        const okChars = chars.filter((ch) => {
+        const okChars = chars.filter(function (ch) {
             const d = dataMap.get(ch);
             return d && d.strokes && d.strokes.length > 0;
         }).length;
@@ -339,7 +560,7 @@
         statsEl.textContent = t('strokes.statsLine', {
             ok: okChars,
             total: chars.length,
-            steps: totalSteps
+            steps: totalStepsRef.n
         });
     }
 
@@ -421,6 +642,39 @@
     if (window.WordcardsCsvWordlists) {
         WordcardsCsvWordlists.initWordListToggle(strokeToggleWordList, strokeWordListWrap);
     }
+
+    function syncPracticeFieldVisibility() {
+        if (!practiceCountField) return;
+        practiceCountField.classList.toggle(
+            'hidden',
+            !(practiceRowsCheck && practiceRowsCheck.checked)
+        );
+    }
+    syncPracticeFieldVisibility();
+    if (practiceRowsCheck) {
+        practiceRowsCheck.addEventListener('change', syncPracticeFieldVisibility);
+    }
+
+    const debouncedStrokeBuild = debounce(function () {
+        if (wordInput.value.trim()) {
+            runBuild();
+        }
+    }, 400);
+
+    if (wordInput) {
+        wordInput.addEventListener('input', debouncedStrokeBuild);
+    }
+
+    [gridColsInput, showMetaCheck, showStepNumbersCheck, practiceRowsCheck, practiceRowsCountInput].forEach(
+        function (el) {
+            if (!el) return;
+            el.addEventListener('change', function () {
+                if (wordInput.value.trim()) {
+                    runBuild();
+                }
+            });
+        }
+    );
 
     restoreInput();
     if (wordInput.value.trim()) {

@@ -51,16 +51,24 @@ or just simply: 谢再见你好"></textarea>
             <h2 data-i18n="strokes.layoutSection">Parameters</h2>
             <div class="radical-options stroke-layout-options">
                 <label class="field">
-                    <span data-i18n="strokes.stepsPerRow">Step boxes per row</span>
-                    <input type="number" id="strokeStepsPerRow" min="4" max="24" value="8">
-                </label>
-                <label class="field">
-                    <span data-i18n="strokes.stepSize">Step size (px)</span>
-                    <input type="number" id="strokeStepSize" min="40" max="120" value="64">
+                    <span data-i18n="radicals.columns">Number of columns in the grid</span>
+                    <input type="number" id="strokeGridCols" min="2" max="24" value="10">
                 </label>
                 <label class="checkbox-label">
-                    <input type="checkbox" id="strokeShowPinyin" checked>
-                    <span data-i18n="strokes.showPinyin">Show pinyin under each character title</span>
+                    <input type="checkbox" id="strokeShowMeta" checked>
+                    <span data-i18n="strokes.showMeta">Show pinyin and/or translation</span>
+                </label>
+                <label class="checkbox-label">
+                    <input type="checkbox" id="strokeShowStepNumbers" checked>
+                    <span data-i18n="strokes.showStepNumbers">Show step numbers</span>
+                </label>
+                <label class="checkbox-label">
+                    <input type="checkbox" id="strokePracticeRows">
+                    <span data-i18n="strokes.practiceRows">Add practice rows</span>
+                </label>
+                <label class="field stroke-practice-count-field hidden">
+                    <span data-i18n="strokes.practiceRowsCount">Practice rows to add</span>
+                    <input type="number" id="strokePracticeRowsCount" min="1" max="12" value="2">
                 </label>
             </div>
             <div class="button-group">
