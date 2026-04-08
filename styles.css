@@ -630,15 +630,32 @@ button.wl-pinyin-slot:not([data-wl-word]) {
 }
 
 .wl-thematic-bar select {
-    flex: 1;
+    flex: 1 1 10rem;
+    min-width: 8rem;
     padding: 8px;
     font-size: 14px;
     border: 1px solid #ccc;
     border-radius: 5px;
 }
 
+.wl-thematic-filter {
+    flex: 1 1 12rem;
+    min-width: 10rem;
+    max-width: 24rem;
+    padding: 8px 10px;
+    font-size: 14px;
+    border: 1px solid #ccc;
+    border-radius: 5px;
+    box-sizing: border-box;
+}
+
 .wl-thematic-bar button {
     margin: 0;
+    flex-shrink: 0;
+}
+
+.wl-thematic-grid .wl-thematic-word.wl-filter-hidden {
+    display: none;
 }
 
 .wl-thematic-grid {

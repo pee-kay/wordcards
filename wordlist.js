@@ -16,6 +16,9 @@
         '\u00fc': ['\u01d6', '\u01d8', '\u01da', '\u01dc']
     };
 
+    /** Toneless Hanyu Pinyin syllables (pinyin-data Unihan), for “pinyin vs translation” filter classification */
+    var THEMATIC_PINYIN_SYLLABLES_CSV = "a,ai,an,ang,ao,ba,bai,ban,bang,bao,bei,ben,beng,bi,bian,biang,biao,bie,bin,bing,bo,bu,ca,cai,can,cang,cao,ce,cei,cen,ceng,cha,chai,chan,chang,chao,che,chen,cheng,chi,chong,chou,chu,chua,chuai,chuan,chuang,chui,chun,chuo,ci,cong,cou,cu,cuan,cui,cun,cuo,da,dai,dan,dang,dao,de,dei,den,deng,di,dia,dian,diao,die,din,ding,diu,dong,dou,du,duan,dui,dun,duo,e,ei,en,eng,er,fa,fan,fang,fei,fen,feng,fiao,fo,fou,fu,g,ga,gai,gan,gang,gao,ge,gei,gen,geng,gong,gou,gu,gua,guai,guan,guang,gui,gun,guo,ha,hai,han,hang,hao,he,hei,hen,heng,hm,hng,hong,hou,hu,hua,huai,huan,huang,hui,hun,huo,ji,jia,jian,jiang,jiao,jie,jin,jing,jiong,jiu,ju,juan,jue,jun,ka,kai,kan,kang,kao,ke,kei,ken,keng,kong,kou,ku,kua,kuai,kuan,kuang,kui,kun,kuo,la,lai,lan,lang,lao,le,lei,len,leng,li,lia,lian,liang,liao,lie,lin,ling,lio,liu,lo,long,lou,lu,luan,lun,luo,lü,lüe,m,ma,mai,man,mang,mao,me,mei,men,meng,mi,mian,miao,mie,min,ming,miu,mo,mou,mu,n,na,nai,nan,nang,nao,ne,nei,nen,neng,ng,ni,nia,nian,niang,niao,nie,nin,ning,niu,nong,nou,nu,nuan,nun,nuo,nü,nüe,o,ou,pa,pai,pan,pang,pao,pei,pen,peng,pi,pian,piao,pie,pin,ping,po,pou,pu,qi,qia,qian,qiang,qiao,qie,qin,qing,qiong,qiu,qu,quan,que,qun,ran,rang,rao,re,ren,reng,ri,rong,rou,ru,rua,ruan,rui,run,ruo,sa,sai,san,sang,sao,se,sen,seng,sha,shai,shan,shang,shao,she,shei,shen,sheng,shi,shou,shu,shua,shuai,shuan,shuang,shui,shun,shuo,si,song,sou,su,suan,sui,sun,suo,ta,tai,tan,tang,tao,te,tei,teng,ti,tian,tiao,tie,ting,tong,tou,tu,tuan,tui,tun,tuo,wa,wai,wan,wang,wei,wen,weng,wo,wong,wu,xi,xia,xian,xiang,xiao,xie,xin,xing,xiong,xiu,xu,xuan,xue,xun,ya,yan,yang,yao,ye,yi,yin,ying,yo,yong,you,yu,yuan,yue,yun,za,zai,zan,zang,zao,ze,zei,zen,zeng,zha,zhai,zhan,zhang,zhao,zhe,zhei,zhen,zheng,zhi,zhong,zhou,zhu,zhua,zhuai,zhuan,zhuang,zhui,zhun,zhuo,zi,zong,zou,zu,zuan,zui,zun,zuo";
+
     // ── DOM refs ──
     var addInput = document.getElementById('wlAddInput');
     var undoBtn = document.getElementById('wlUndo');
@@ -35,6 +38,7 @@
     var thematicToggle = document.getElementById('wlThematicToggle');
     var thematicAddAll = document.getElementById('wlThematicAddAll');
     var thematicGrid = document.getElementById('wlThematicGrid');
+    var thematicFilterInput = document.getElementById('wlThematicFilter');
     var suggestEl = document.getElementById('wlSuggest');
     var suggestTextEl = document.getElementById('wlSuggestText');
     var suggestAcceptBtn = document.getElementById('wlSuggestAccept');
@@ -979,6 +983,218 @@
         }
     }
 
+    var _thematicSylSet = null;
+    var _thematicSylList = null;
+    var _thematicFilterDebounce = null;
+
+    function ensureThematicPinyinSyllables() {
+        if (_thematicSylSet) return;
+        _thematicSylList = THEMATIC_PINYIN_SYLLABLES_CSV.split(',');
+        _thematicSylSet = {};
+        for (var si = 0; si < _thematicSylList.length; si++) {
+            _thematicSylSet[_thematicSylList[si]] = true;
+        }
+    }
+
+    function couldBePinyinLatin(norm) {
+        ensureThematicPinyinSyllables();
+        var SYL = _thematicSylSet;
+        function from(pos) {
+            if (pos === norm.length) return true;
+            var max = Math.min(6, norm.length - pos);
+            for (var len = max; len >= 1; len--) {
+                var piece = norm.substring(pos, pos + len);
+                if (SYL[piece] && from(pos + len)) return true;
+            }
+            var rest = norm.substring(pos);
+            for (var j = 0; j < _thematicSylList.length; j++) {
+                var syl = _thematicSylList[j];
+                if (syl.length > rest.length && syl.indexOf(rest) === 0) return true;
+            }
+            return false;
+        }
+        return from(0);
+    }
+
+    function normalizeThematicPinyinSearch(s) {
+        var n = normalizePinyinInput(String(s || '').trim());
+        return stripToneMarks(n).toLowerCase().replace(/[\s·']/g, '');
+    }
+
+    /** Lowercase pinyin with tone marks/digits normalized, spaces removed (for tone-sensitive substring match). */
+    function thematicPinyinWithTonesCompact(s) {
+        var n = normalizePinyinInput(String(s || '').trim()).toLowerCase();
+        return n.replace(/[\s·']/g, '');
+    }
+
+    function thematicQuerySpecifiesTones(trimmed) {
+        var n = normalizePinyinInput(String(trimmed || '').trim()).toLowerCase();
+        return stripToneMarks(n) !== n;
+    }
+
+    function thematicRowSourcePinyin(r) {
+        var py = (r.pinyin || '').trim();
+        if (!py && r.word) py = getPinyin(r.word) || '';
+        return py;
+    }
+
+    /** Split compact tone-marked pinyin into syllables using the thematic syllable set (parallel detoned/tone strings). */
+    function segmentTonedPinyinCompact(compact) {
+        ensureThematicPinyinSyllables();
+        var SYL = _thematicSylSet;
+        var d = stripToneMarks(compact);
+        var out = [];
+        var pos = 0;
+        while (pos < compact.length) {
+            var max = Math.min(6, compact.length - pos);
+            var found = false;
+            for (var len = max; len >= 1; len--) {
+                var subD = d.substring(pos, pos + len);
+                var subT = compact.substring(pos, pos + len);
+                if (SYL[subD] && stripToneMarks(subT) === subD) {
+                    out.push(subT);
+                    pos += len;
+                    found = true;
+                    break;
+                }
+            }
+            if (!found) {
+                out.push(compact.substring(pos, pos + 1));
+                pos += 1;
+            }
+        }
+        return out;
+    }
+
+    function thematicSyllableMatchesFilterQuery(rowSyl, querySyl) {
+        var q = String(querySyl || '').toLowerCase();
+        var r = String(rowSyl || '').toLowerCase();
+        if (!q) return true;
+        if (stripToneMarks(q) === q) return stripToneMarks(r) === q;
+        return r === q;
+    }
+
+    function rowMatchesConsecutivePinyinSyllables(rowSyls, querySyls) {
+        if (querySyls.length === 0) return true;
+        if (rowSyls.length < querySyls.length) return false;
+        for (var start = 0; start <= rowSyls.length - querySyls.length; start++) {
+            var ok = true;
+            for (var k = 0; k < querySyls.length; k++) {
+                if (!thematicSyllableMatchesFilterQuery(rowSyls[start + k], querySyls[k])) {
+                    ok = false;
+                    break;
+                }
+            }
+            if (ok) return true;
+        }
+        return false;
+    }
+
+    function thematicRowMatchesToneAwarePinyin(r, spec) {
+        var rowC = thematicPinyinWithTonesCompact(thematicRowSourcePinyin(r));
+        var qCompact = spec.tonedCompact;
+        if (!rowC || !qCompact) return false;
+        var qSyls = segmentTonedPinyinCompact(qCompact);
+        if (qSyls.length === 0) return rowC.indexOf(qCompact) !== -1;
+        var rowSyls = segmentTonedPinyinCompact(rowC);
+        if (rowSyls.length === 0) return rowC.indexOf(qCompact) !== -1;
+        if (rowMatchesConsecutivePinyinSyllables(rowSyls, qSyls)) return true;
+        return rowC.indexOf(qCompact) !== -1;
+    }
+
+    var THEMATIC_HAN_REGEX = /[\u4e00-\u9fff\u3400-\u4dbf\uf900-\ufaff]/;
+
+    function thematicHasTranslationLetters(s) {
+        return /[a-zA-Z\u00c0-\u024f\u0400-\u04FF]/.test(s);
+    }
+
+    function classifyThematicFilterQuery(raw) {
+        var trimmed = String(raw || '').trim();
+        if (!trimmed) return { mode: 'all' };
+
+        if (THEMATIC_HAN_REGEX.test(trimmed)) {
+            var cjk = trimmed.replace(/[^\u4e00-\u9fff\u3400-\u4dbf\uf900-\ufaff]/g, '');
+            return { mode: 'hanzi', needle: cjk };
+        }
+
+        var latinCore = trimmed.replace(/[^a-zA-Zü]/g, '');
+        if (!latinCore) {
+            if (!thematicHasTranslationLetters(trimmed)) return { mode: 'none' };
+            if (/^\s*\d+\s*$/.test(trimmed)) return { mode: 'none' };
+            return { mode: 'translation', needle: trimmed.toLowerCase() };
+        }
+
+        var norm = normalizeThematicPinyinSearch(trimmed);
+        if (!norm) return { mode: 'none' };
+
+        if (!/^[a-zü]+$/.test(norm)) {
+            return { mode: 'none' };
+        }
+
+        var toneAware = thematicQuerySpecifiesTones(trimmed);
+        var tonedCompact = thematicPinyinWithTonesCompact(trimmed);
+
+        if (norm.length < 5) {
+            return { mode: 'pinyin', needle: norm, toneAware: toneAware, tonedCompact: tonedCompact };
+        }
+
+        if (couldBePinyinLatin(norm)) {
+            return { mode: 'pinyin', needle: norm, toneAware: toneAware, tonedCompact: tonedCompact };
+        }
+
+        return { mode: 'translation', needle: trimmed.toLowerCase() };
+    }
+
+    function thematicRowPinyinHaystack(r) {
+        return normalizeThematicPinyinSearch(thematicRowSourcePinyin(r)).replace(/\s/g, '');
+    }
+
+    function thematicRowMatchesFilter(r, spec) {
+        if (!r.word) return false;
+        if (spec.mode === 'all') return true;
+        if (spec.mode === 'none') return false;
+        if (spec.mode === 'hanzi') {
+            if (!spec.needle) return false;
+            var w = (r.word || '').replace(/\s/g, '');
+            return w.indexOf(spec.needle) !== -1;
+        }
+        if (spec.mode === 'pinyin') {
+            if (spec.toneAware && spec.tonedCompact) {
+                return thematicRowMatchesToneAwarePinyin(r, spec);
+            }
+            return thematicRowPinyinHaystack(r).indexOf(spec.needle) !== -1;
+        }
+        if (spec.mode === 'translation') {
+            return (r.translation || '').toLowerCase().indexOf(spec.needle) !== -1;
+        }
+        return false;
+    }
+
+    function setThematicFilterVisible(visible) {
+        if (!thematicFilterInput) return;
+        thematicFilterInput.classList.toggle('hidden', !visible);
+    }
+
+    function applyThematicFilter() {
+        if (!thematicGrid) return;
+        var q = thematicFilterInput ? thematicFilterInput.value : '';
+        var spec = classifyThematicFilterQuery(q);
+        var btns = thematicGrid.querySelectorAll('.wl-thematic-word');
+        for (var fi = 0; fi < btns.length; fi++) {
+            var btn = btns[fi];
+            var idx = parseInt(btn.getAttribute('data-wl-thematic-idx'), 10);
+            if (isNaN(idx) || !currentThematicRows[idx]) continue;
+            var show = thematicRowMatchesFilter(currentThematicRows[idx], spec);
+            btn.classList.toggle('wl-filter-hidden', !show);
+        }
+        dimThematicWords();
+    }
+
+    function onThematicFilterInput() {
+        clearTimeout(_thematicFilterDebounce);
+        _thematicFilterDebounce = setTimeout(applyThematicFilter, 120);
+    }
+
     // ── Thematic list picker ──
     function loadManifest() {
         if (!thematicSelect) return;
@@ -1021,6 +1237,8 @@
             thematicGrid.classList.add('hidden');
             if (thematicToggle) thematicToggle.classList.add('hidden');
             if (thematicAddAll) thematicAddAll.classList.add('hidden');
+            setThematicFilterVisible(false);
+            if (thematicFilterInput) thematicFilterInput.value = '';
             return;
         }
 
@@ -1039,9 +1257,11 @@
                     parsed.push({ word: f[0] || '', pinyin: f[1] || '', translation: f[2] || '' });
                 }
                 currentThematicRows = parsed;
+                if (thematicFilterInput) thematicFilterInput.value = '';
                 renderThematicGrid();
                 thematicWordsHidden = false;
                 thematicGrid.classList.remove('hidden');
+                setThematicFilterVisible(true);
                 if (thematicToggle) {
                     thematicToggle.classList.remove('hidden');
                     thematicToggle.textContent = t('wl.thematicHide');
@@ -1053,6 +1273,8 @@
                 thematicGrid.classList.add('hidden');
                 if (thematicToggle) thematicToggle.classList.add('hidden');
                 if (thematicAddAll) thematicAddAll.classList.add('hidden');
+                setThematicFilterVisible(false);
+                if (thematicFilterInput) thematicFilterInput.value = '';
             });
     }
 
@@ -1069,6 +1291,7 @@
             btn.className = 'wl-thematic-word';
             btn.textContent = r.word;
             if (wordsInTable[r.word]) btn.classList.add('wl-in-table');
+            btn.setAttribute('data-wl-thematic-idx', String(i));
             btn.addEventListener('click', (function (row) {
                 return function () {
                     saveSnapshot();
@@ -1078,6 +1301,7 @@
             })(r));
             thematicGrid.appendChild(btn);
         }
+        applyThematicFilter();
     }
 
     function dimThematicWords() {
@@ -1085,7 +1309,10 @@
         var wordsInTable = buildWordSet();
         var btns = thematicGrid.querySelectorAll('.wl-thematic-word');
         for (var i = 0; i < btns.length; i++) {
-            btns[i].classList.toggle('wl-in-table', !!wordsInTable[btns[i].textContent]);
+            var tb = btns[i];
+            var w = tb.textContent;
+            var dim = !!wordsInTable[w];
+            if (tb.classList.contains('wl-in-table') !== dim) tb.classList.toggle('wl-in-table', dim);
         }
     }
 
@@ -1105,11 +1332,15 @@
     }
 
     function addAllThematic() {
-        if (currentThematicRows.length === 0) return;
+        if (!thematicGrid || currentThematicRows.length === 0) return;
+        var btns = thematicGrid.querySelectorAll('.wl-thematic-word:not(.wl-filter-hidden)');
+        if (btns.length === 0) return;
         saveSnapshot();
-        for (var i = 0; i < currentThematicRows.length; i++) {
-            var r = currentThematicRows[i];
-            if (r.word) addWordRow(r.word, r.pinyin, r.translation);
+        for (var ai = 0; ai < btns.length; ai++) {
+            var idx = parseInt(btns[ai].getAttribute('data-wl-thematic-idx'), 10);
+            if (isNaN(idx)) continue;
+            var r = currentThematicRows[idx];
+            if (r && r.word) addWordRow(r.word, r.pinyin, r.translation);
         }
         renderTable();
     }
@@ -1166,6 +1397,7 @@
         }
         if (thematicToggle) thematicToggle.addEventListener('click', toggleThematicGrid);
         if (thematicAddAll) thematicAddAll.addEventListener('click', addAllThematic);
+        if (thematicFilterInput) thematicFilterInput.addEventListener('input', onThematicFilterInput);
 
         if (suggestAcceptBtn) suggestAcceptBtn.addEventListener('click', function () {
             if (_suggestAcceptFn) _suggestAcceptFn();
@@ -1210,6 +1442,7 @@
             }
             var opt0 = thematicSelect && thematicSelect.options[0];
             if (opt0 && opt0.value === '') opt0.textContent = t('wl.thematicSelect');
+            applyThematicFilter();
         });
 
         loadManifest();
