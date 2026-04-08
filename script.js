@@ -44,7 +44,7 @@ function cardArraysEqual(a, b) {
 let cards = [];
 let currentCardIndex = 0;
 let currentMode = 'editor';
-let isRandomized = false;
+let isRandomized = true;
 let usedRandomIndices = new Set();
 const STORAGE_KEY = 'wordCardsData';
 
@@ -67,7 +67,6 @@ const cardPronunciation = document.getElementById('cardPronunciation');
 const cardMeaning = document.getElementById('cardMeaning');
 const firstCardBtn = document.getElementById('firstCard');
 const prevCardBtn = document.getElementById('prevCard');
-const flipCardBtn = document.getElementById('flipCard');
 const nextCardBtn = document.getElementById('nextCard');
 const lastCardBtn = document.getElementById('lastCard');
 const randomizeCheckbox = document.getElementById('randomizeCards');
@@ -129,7 +128,6 @@ function init() {
     if (prevCardBtn) prevCardBtn.addEventListener('click', showPrevCard);
     if (nextCardBtn) nextCardBtn.addEventListener('click', showNextCard);
     if (lastCardBtn) lastCardBtn.addEventListener('click', showLastCard);
-    if (flipCardBtn) flipCardBtn.addEventListener('click', flipCard);
     if (flashcard) flashcard.addEventListener('click', flipCard);
     if (randomizeCheckbox) randomizeCheckbox.addEventListener('change', toggleRandomize);
     
@@ -180,6 +178,13 @@ function init() {
 
     // Set initial mode
     setMode('editor');
+
+    if (randomizeCheckbox) {
+        isRandomized = randomizeCheckbox.checked;
+        if (isRandomized && cards.length > 0) {
+            usedRandomIndices.add(currentCardIndex);
+        }
+    }
 
     document.addEventListener('wordcards:locale-changed', refreshIndexLocale);
 }
