@@ -816,16 +816,352 @@
         URL.revokeObjectURL(a.href);
     }
 
-    function parseCsvText(text) {
-        var lines = text.split(/\r?\n/);
-        var result = [];
+    // ── CSV import: strict word list vs Miro-style loose exports ──
+    function normalizeMiroImportText(s) {
+        return String(s || '')
+            .replace(/\uFEFF/g, '')
+            .replace(/\u200B|\u200C|\u200D/g, '');
+    }
+
+    function parseCsvToFieldRows(text) {
+        var lines = String(text || '').split(/\r?\n/);
+        var rows = [];
         for (var i = 0; i < lines.length; i++) {
             var line = lines[i].trim();
             if (!line) continue;
-            var fields = parseCsvLine(line);
+            rows.push(parseCsvLine(line));
+        }
+        return rows;
+    }
+
+    function rowLooksLikeStrictVocabRow(fields) {
+        var w = (fields[0] || '').trim();
+        if (!w || !WL_HAN_REGEX.test(w) || w.length > 96) return false;
+        if (/Слова\s|^Диалог|^作业|^Прописи|^Frame\s/i.test(w)) return false;
+        if (/Ключ|Графема/.test(w)) return false;
+        if (fields.length < 2) return false;
+        var p = (fields[1] || '').trim();
+        if (!p) return false;
+        if (!/^[a-zA-Z\u00fc\u00dc\u00c0-\u00ff\u0100-\u024f\u1e00-\u1eff0-9\s.,\-\/]+$/.test(p)) return false;
+        return true;
+    }
+
+    function shouldUseMiroCsvExtractor(fieldRows, rawText) {
+        if (!fieldRows.length || !WL_HAN_REGEX.test(rawText)) return false;
+        var strict = 0;
+        var hanLines = 0;
+        var singleField = 0;
+        var longSingle = 0;
+        for (var i = 0; i < fieldRows.length; i++) {
+            var r = fieldRows[i];
+            var f0 = (r[0] || '').trim();
+            if (!f0 || !WL_HAN_REGEX.test(f0)) continue;
+            hanLines++;
+            if (rowLooksLikeStrictVocabRow(r)) strict++;
+            if (r.length === 1) {
+                singleField++;
+                if (f0.length > 80) longSingle++;
+            }
+        }
+        if (hanLines === 0) return false;
+        if (strict / hanLines >= 0.55) return false;
+        if (longSingle >= 3) return true;
+        if (singleField / fieldRows.length >= 0.38 && longSingle >= 1) return true;
+        if (strict / hanLines < 0.22 && singleField / fieldRows.length >= 0.25) return true;
+        return false;
+    }
+
+    function miroPinyinHasVowel(py) {
+        return /[aeiouAEIOUāáǎàēéěèīíǐìōóǒòūúǔùǖǘǚǜ]/.test(py);
+    }
+
+    function miroLooksLikePinyinRun(py) {
+        if (!py || py.length > 48) return false;
+        if (!/^[a-zA-Z\u00fc\u00dc\u00c0-\u00ff\u0100-\u024f\u1e00-\u1eff\s]+$/.test(py)) return false;
+        return miroPinyinHasVowel(py);
+    }
+
+    function miroNormalizePinyin(py) {
+        var s = String(py || '').replace(/\s+/g, ' ').trim();
+        if (!s) return '';
+        if (/[1-5]/.test(s)) return normalizePinyinInput(s);
+        return s;
+    }
+
+    /** Pinyin run: ASCII + ü + Latin-1 (í ó ú in píng) + Latin Extended (ǎ ǒ …). */
+    function miroPinyinChunkReSource() {
+        return '[a-zA-Z\\u00fc\\u00dc\\u00c0-\\u00ff\\u0100-\\u024f\\u1e00-\\u1eff]+(?:\\s+[a-zA-Z\\u00fc\\u00dc\\u00c0-\\u00ff\\u0100-\\u024f\\u1e00-\\u1eff]+){0,7}';
+    }
+
+    function snapMiroGlossAfterDash(rest) {
+        var s = String(rest || '');
+        var i = 0;
+        while (i < s.length && /\s/.test(s[i])) i++;
+        var start = i;
+        while (i < s.length) {
+            if (s.slice(i, i + 4) === 'Ключ' || s.slice(i, i + 7) === 'Графема') break;
+            if (s[i] === '\n') {
+                var j = i + 1;
+                while (j < s.length && /\s/.test(s[j])) j++;
+                if (/[\u4e00-\u9fff\u3400-\u4dbf\uf900-\ufaff]/.test(s[j] || '')) break;
+            }
+            if (s[i] === ' ' && s[i + 1] === ' ' && /[\u4e00-\u9fff\u3400-\u4dbf\uf900-\ufaff]/.test(s[i + 2] || '')) break;
+            if (/\s/.test(s[i])) {
+                var k = i;
+                while (k < s.length && /\s/.test(s[k])) k++;
+                if (/[\u4e00-\u9fff\u3400-\u4dbf\uf900-\ufaff]/.test(s[k] || '')) {
+                    var endHan = k;
+                    while (endHan < s.length && /[\u4e00-\u9fff\u3400-\u4dbf\uf900-\ufaff]/.test(s[endHan])) endHan++;
+                    if (endHan - k <= 22) break;
+                }
+            }
+            if (/^\d+\.\s*/.test(s.slice(i)) && /[\u4e00-\u9fff\u3400-\u4dbf\uf900-\ufaff]/.test(s.slice(i).replace(/^\d+\.\s*/, '')[0] || '')) break;
+            i++;
+        }
+        return s.slice(start, i).replace(/\s+$/g, '').trim();
+    }
+
+    function snapMiroRussianGloss(rest) {
+        var s = String(rest || '');
+        var i = 0;
+        while (i < s.length && /\s/.test(s[i])) i++;
+        if (!/[А-Яа-яЁё]/.test(s[i] || '')) return '';
+        var start = i;
+        i++;
+        while (i < s.length) {
+            if (s.slice(i, i + 4) === 'Ключ' || s.slice(i, i + 7) === 'Графема') break;
+            if (s[i] === '\n') break;
+            if (s[i] === ' ' && s[i + 1] === ' ' && /[\u4e00-\u9fff\u3400-\u4dbf\uf900-\ufaff]/.test(s[i + 2] || '')) break;
+            if (/\s/.test(s[i])) {
+                var k = i;
+                while (k < s.length && /\s/.test(s[k])) k++;
+                if (/[\u4e00-\u9fff\u3400-\u4dbf\uf900-\ufaff]/.test(s[k] || '')) {
+                    var eh = k;
+                    while (eh < s.length && /[\u4e00-\u9fff\u3400-\u4dbf\uf900-\ufaff]/.test(s[eh])) eh++;
+                    if (eh - k <= 22) break;
+                }
+            }
+            if (/^\d+\.\s*/.test(s.slice(i)) && /[\u4e00-\u9fff\u3400-\u4dbf\uf900-\ufaff]/.test(s.slice(i).replace(/^\d+\.\s*/, '')[0] || '')) break;
+            i++;
+        }
+        return s.slice(start, i).replace(/\s+$/g, '').trim();
+    }
+
+    function extractMiroHanPinyinDash(s) {
+        var out = [];
+        var py = miroPinyinChunkReSource();
+        var re = new RegExp(
+            '([\\u4e00-\\u9fff\\u3400-\\u4dbf\\uf900-\\ufaff]{1,24})\\s+(' + py + ')\\s*[-–—]',
+            'g'
+        );
+        var m;
+        while ((m = re.exec(s)) !== null) {
+            var pyRaw = m[2].replace(/\s+/g, ' ').trim();
+            if (!miroLooksLikePinyinRun(pyRaw)) continue;
+            var after = s.slice(m.index + m[0].length);
+            var gloss = snapMiroGlossAfterDash(after);
+            out.push({ word: m[1], pinyin: miroNormalizePinyin(pyRaw), translation: gloss });
+        }
+        return out;
+    }
+
+    function extractMiroHanPinyinNoGloss(s) {
+        var out = [];
+        var py = miroPinyinChunkReSource();
+        var re = new RegExp(
+            '([\\u4e00-\\u9fff\\u3400-\\u4dbf\\uf900-\\ufaff]{1,24})\\s+(' + py + ')(?=\\s{2,}|\\s+Ключ|\\s+Графема|\\s+\\d+\\.\\s|\\n|$)',
+            'g'
+        );
+        var m;
+        while ((m = re.exec(s)) !== null) {
+            var tail = s.slice(m.index + m[0].length);
+            if (/^\s*[-–—]/.test(tail)) continue;
+            var pyRaw = m[2].replace(/\s+/g, ' ').trim();
+            if (!miroLooksLikePinyinRun(pyRaw)) continue;
+            out.push({ word: m[1], pinyin: miroNormalizePinyin(pyRaw), translation: '' });
+        }
+        return out;
+    }
+
+    /** 香 xiāng- ароматный (hyphen glued to pinyin). */
+    function extractMiroHanPinyinHyphenGloss(s) {
+        var out = [];
+        var py = miroPinyinChunkReSource();
+        var re = new RegExp(
+            '([\\u4e00-\\u9fff\\u3400-\\u4dbf\\uf900-\\ufaff]{1,12})\\s+(' + py + ')-\\s+([А-Яа-яЁё][^\\u4e00-\\u9fff\\u3400-\\u4dbf\\uf900-\\ufaff\\n]{0,200})',
+            'g'
+        );
+        var m;
+        while ((m = re.exec(s)) !== null) {
+            var g = m[3];
+            var cutKw = g.search(/\s+Ключ|\s+Графема|\s+\d+\.\s*[\u4e00-\u9fff]/);
+            if (cutKw !== -1) g = g.slice(0, cutKw);
+            var cutDig = g.search(/\s+\d+\./);
+            if (cutDig !== -1) g = g.slice(0, cutDig);
+            var cutHan = g.search(/\s{2,}[\u4e00-\u9fff\u3400-\u4dbf\uf900-\ufaff]/);
+            if (cutHan !== -1) g = g.slice(0, cutHan);
+            g = g.replace(/\s+$/g, '').trim();
+            if (!g) continue;
+            out.push({ word: m[1], pinyin: miroNormalizePinyin(m[2]), translation: g });
+        }
+        return out;
+    }
+
+    /** Ключ Трава 艹 cǎo; Плод/Злак/Дерево/Запад + Han + pinyin; Ключ Нож 刂 (no pinyin in export). */
+    function extractMiroSchemaLabels(s) {
+        var out = [];
+        var py = miroPinyinChunkReSource();
+        var labelTr = { Плод: 'плод', Злак: 'злак', Дерево: 'дерево', Запад: 'запад' };
+        var reTra = new RegExp('Ключ\\s+Трава\\s+([\\u4e00-\\u9fff\\u3400-\\u4dbf\\uf900-\\ufaff]{1,8})\\s+(' + py + ')', 'g');
+        var m;
+        while ((m = reTra.exec(s)) !== null) {
+            out.push({ word: m[1], pinyin: miroNormalizePinyin(m[2]), translation: 'трава' });
+        }
+        var reLbl = new RegExp('(Плод|Злак|Дерево|Запад)\\s+([\\u4e00-\\u9fff\\u3400-\\u4dbf\\uf900-\\ufaff]{1,8})\\s+(' + py + ')', 'g');
+        while ((m = reLbl.exec(s)) !== null) {
+            var tr = labelTr[m[1]] || m[1].toLowerCase();
+            out.push({ word: m[2], pinyin: miroNormalizePinyin(m[3]), translation: tr });
+        }
+        var reKnife = /Ключ\s+Нож\s+([\u4e00-\u9fff\u3400-\u4dbf\uf900-\ufaff]{1,4})\s*(?=\s*\d)/g;
+        while ((m = reKnife.exec(s)) !== null) {
+            out.push({ word: m[1], pinyin: '', translation: 'нож' });
+        }
+        return out;
+    }
+
+    /** «Графема Ровный, гладкий  平 píng» / «Графема Спеть, созревать 登 dēng» — RU gloss after label, before Han+pinyin.
+     *  «Графема» is required so we never capture from its leading «Г» into a group that contains the word «Графема» (that used to drop 平/登).
+     *  The captured Russian must contain a comma so «продавать 苹果 píngguǒ» is never read as RU+Hàn+pinyin. */
+    function extractMiroRussianBeforeHanPinyin(s) {
+        var out = [];
+        var py = miroPinyinChunkReSource();
+        var re = new RegExp(
+            'Графема\\s+([А-Яа-яЁё][А-Яа-яЁё\\-–—,\\s]{2,100}?)\\s+([\\u4e00-\\u9fff\\u3400-\\u4dbf\\uf900-\\ufaff]{1,12})\\s+(' + py + ')(?=\\s{2,}|\\s+Ключ|\\s+Графема|\\s+\\d+\\.\\s|\\s*$)',
+            'g'
+        );
+        var m;
+        while ((m = re.exec(s)) !== null) {
+            var ru = m[1].replace(/\s+$/g, '').trim();
+            if (ru.length < 4) continue;
+            if (ru.indexOf(',') === -1) continue;
+            if (/^(Ключ|Графема|Слова|Диалог)/i.test(ru)) continue;
+            if (/Графема|Ключ/.test(ru)) continue;
+            out.push({ word: m[2], pinyin: miroNormalizePinyin(m[3]), translation: ru });
+        }
+        return out;
+    }
+
+    function extractMiroHanDashRussian(s) {
+        var out = [];
+        var re = /([\u4e00-\u9fff\u3400-\u4dbf\uf900-\ufaff]{1,24})\s*[-–—]\s*/g;
+        var m;
+        while ((m = re.exec(s)) !== null) {
+            var pos = m.index + m[0].length;
+            if (/[a-zA-Z]/.test(s[pos] || '')) continue;
+            var gloss = snapMiroRussianGloss(s.slice(pos));
+            if (!gloss) continue;
+            out.push({ word: m[1], pinyin: '', translation: gloss });
+        }
+        return out;
+    }
+
+    function extractMiroStandaloneChineseLines(blob) {
+        var out = [];
+        var lines = String(blob || '').split(/\r?\n/);
+        for (var i = 0; i < lines.length; i++) {
+            var line = normalizeMiroImportText(lines[i]).replace(/^["\s]+|["\s]+$/g, '').trim();
+            if (!line || line.length > 100) continue;
+            if (/[-–—]/.test(line) && /[a-zA-Z]/.test(line)) continue;
+            if (/[a-zA-Z]{3,}/.test(line)) continue;
+            if (!/^[\u4e00-\u9fff\u3400-\u4dbf\uf900-\ufaff\u3000-\u303f\uff0c\uff1f\uff01\s，。、！？]+$/.test(line)) continue;
+            var compact = line.replace(/\s+/g, '');
+            if (compact.length < 1 || compact.length > 48) continue;
+            out.push({ word: compact, pinyin: '', translation: '' });
+        }
+        return out;
+    }
+
+    function miroMergeRows(lists) {
+        var map = {};
+        var order = [];
+        function consider(r) {
+            var w = (r.word || '').trim();
+            if (!w || !WL_HAN_REGEX.test(w)) return;
+            if (w.length > 48) return;
+            if (!map[w]) {
+                map[w] = { word: w, pinyin: (r.pinyin || '').trim(), translation: (r.translation || '').trim() };
+                order.push(w);
+                return;
+            }
+            var ex = map[w];
+            if (!ex.translation && r.translation) ex.translation = (r.translation || '').trim();
+            if (!ex.pinyin && r.pinyin) ex.pinyin = (r.pinyin || '').trim();
+        }
+        for (var li = 0; li < lists.length; li++) {
+            var L = lists[li];
+            for (var j = 0; j < L.length; j++) consider(L[j]);
+        }
+        var merged = [];
+        for (var k = 0; k < order.length; k++) merged.push(map[order[k]]);
+        return merged;
+    }
+
+    function miroPartitionTranslatedLast(list) {
+        var withT = [];
+        var withoutT = [];
+        for (var i = 0; i < list.length; i++) {
+            if ((list[i].translation || '').trim()) withT.push(list[i]);
+            else withoutT.push(list[i]);
+        }
+        return withT.concat(withoutT);
+    }
+
+    function miroFillMissingPinyin(list) {
+        for (var i = 0; i < list.length; i++) {
+            if (!(list[i].pinyin || '').trim()) {
+                var py = getPinyin(list[i].word);
+                if (py) list[i].pinyin = py;
+            }
+        }
+        return list;
+    }
+
+    function parseMiroLooseCsv(rawText, fieldRows) {
+        var parts = [];
+        for (var i = 0; i < fieldRows.length; i++) {
+            parts.push(fieldRows[i].join(' '));
+        }
+        var blob = normalizeMiroImportText(parts.join('\n'));
+        var lists = [
+            extractMiroHanPinyinDash(blob),
+            extractMiroHanPinyinHyphenGloss(blob),
+            extractMiroSchemaLabels(blob),
+            extractMiroRussianBeforeHanPinyin(blob),
+            extractMiroHanPinyinNoGloss(blob),
+            extractMiroHanDashRussian(blob),
+            extractMiroStandaloneChineseLines(rawText)
+        ];
+        var merged = miroMergeRows(lists);
+        miroFillMissingPinyin(merged);
+        return miroPartitionTranslatedLast(merged);
+    }
+
+    function parseCsvTextStrictFromRows(fieldRows) {
+        var result = [];
+        for (var i = 0; i < fieldRows.length; i++) {
+            var fields = fieldRows[i];
             result.push({ word: fields[0] || '', pinyin: fields[1] || '', translation: fields[2] || '' });
         }
         return result;
+    }
+
+    function parseCsvText(text) {
+        var raw = String(text || '');
+        var fieldRows = parseCsvToFieldRows(raw);
+        if (shouldUseMiroCsvExtractor(fieldRows, raw)) {
+            return parseMiroLooseCsv(raw, fieldRows);
+        }
+        return parseCsvTextStrictFromRows(fieldRows);
     }
 
     function applyImportedRows(newRows, mode) {
