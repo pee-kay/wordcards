@@ -142,8 +142,22 @@
             <!-- Writing/Spelling Mode -->
             <div id="writingMode" class="mode-content hidden">
                 <h2 data-i18n="ws.title">Writing / spelling</h2>
+                <div class="flashcard-controls ws-mode-wrap">
+                    <label class="randomize-toggle-label">
+                        <span class="randomize-toggle-text" data-i18n="ws.morphemeOnly">Single-character morpheme quiz (HanziWriter)</span>
+                        <span class="randomize-toggle-wrap">
+                            <input type="checkbox" id="wsMorphemeOnly" class="randomize-toggle-input">
+                            <span class="randomize-toggle-track" aria-hidden="true">
+                                <span class="randomize-toggle-thumb"></span>
+                            </span>
+                        </span>
+                    </label>
+                </div>
                 <div class="quiz-container">
                     <div class="question" id="wsQuestion">Question</div>
+                    <div id="wsHanziQuizPanel" class="hw-panel hidden">
+                        <div id="wsHanziTarget" class="ws-hanzi-target"></div>
+                    </div>
                     <div class="input-container">
                         <input type="text" id="wsAnswer" data-i18n-placeholder="ws.placeholder" placeholder="Write the word">
                         <button id="wsSubmit" data-i18n="ws.check">Check answer</button>
@@ -168,6 +182,7 @@
 
     <script src="i18n.js"></script>
     <script src="csv-wordlists.js"></script>
+    <script src="https://unpkg.com/hanzi-writer@3.7/dist/hanzi-writer.min.js"></script>
     <script src="script.js"></script>
 </body>
 </html>

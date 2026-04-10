@@ -85,10 +85,14 @@
             'ws.hwUndo': 'Undo',
             'ws.hwClear': 'Clear',
             'ws.hwLoading': 'Loading handwriting recognition…',
+            'ws.morphemeOnly': 'All words / Single morphemes',
             'ws.qMeaning': 'How do you write the word that means «{meaning}»?',
             'ws.qPron': 'How do you write the word pronounced «{pron}»?',
+            'ws.qNoMorpheme': 'No single-character morphemes found in the list.',
             'ws.correct': 'Correct!',
             'ws.wrong': 'The correct answer was supposed to be the word {word}.',
+            'ws.noMorphemeCards': 'Add at least one single-character Chinese entry to use this mode.',
+            'ws.hwUnavailable': 'HanziWriter is unavailable. Check network and reload the page.',
             'empty.title': 'No cards available',
             'empty.text': 'Add cards in the word list (Editor mode), then switch to this mode.',
             'empty.goEditor': 'Go to editor',
@@ -190,7 +194,7 @@
             'wl.addPlaceholder': 'Enter Chinese words or pinyin separated by commas',
             'wl.addBtn': 'Add',
             'wl.autoTranslate': 'Auto-suggest English translations (CC-CEDICT)',
-            'wl.autoTranslateLoading': 'Loading dictionary\u2026',
+            'wl.autoTranslateLoading': 'Loading dictionary\\u2026',
             'wl.toolbar': 'Tools',
             'wl.undo': 'Undo',
             'wl.redo': 'Redo',
@@ -236,8 +240,8 @@
             'wl.dedupNone': 'No duplicates found.',
             'wl.confirmClear': 'Remove all {n} words from the list?',
             'wl.statsLine': '{n} word(s) in the list',
-            'wl.suggestPinyin': 'Update pinyin to \u201C{pinyin}\u201D?',
-            'wl.suggestNormalize': 'Normalize to \u201C{pinyin}\u201D?'
+            'wl.suggestPinyin': 'Update pinyin to \\u201C{pinyin}\\u201D?',
+            'wl.suggestNormalize': 'Normalize to \\u201C{pinyin}\\u201D?'
         },
         ru: {
             'lang.label': 'Язык',
@@ -319,10 +323,14 @@
             'ws.hwUndo': 'Отменить',
             'ws.hwClear': 'Очистить',
             'ws.hwLoading': 'Загрузка распознавания рукописного ввода…',
+            'ws.morphemeOnly': 'Все слова / Только морфемы',
             'ws.qMeaning': 'Как написать слово со значением «{meaning}»?',
             'ws.qPron': 'Как написать слово с произношением «{pron}»?',
+            'ws.qNoMorpheme': 'В списке нет подходящих одиночных иероглифов.',
             'ws.correct': 'Верно!',
             'ws.wrong': 'Правильным ответом предполагалось слово {word}.',
+            'ws.noMorphemeCards': 'Добавьте хотя бы одну запись с одиночным китайским иероглифом для этого режима.',
+            'ws.hwUnavailable': 'HanziWriter недоступен. Проверьте сеть и обновите страницу.',
             'empty.title': 'Нет карточек',
             'empty.text': 'Добавьте карточки в списке слов (режим «Редактор»), затем переключитесь сюда.',
             'empty.goEditor': 'К редактору',
@@ -424,7 +432,7 @@
             'wl.addPlaceholder': 'Введите китайские слова или пиньинь через запятую',
             'wl.addBtn': 'Добавить',
             'wl.autoTranslate': 'Автоподсказка англ. переводов (CC-CEDICT)',
-            'wl.autoTranslateLoading': 'Загрузка словаря\u2026',
+            'wl.autoTranslateLoading': 'Загрузка словаря\\u2026',
             'wl.toolbar': 'Инструменты',
             'wl.undo': 'Отменить',
             'wl.redo': 'Повторить',
@@ -470,8 +478,8 @@
             'wl.dedupNone': 'Дубликатов не найдено.',
             'wl.confirmClear': 'Удалить все {n} слов из списка?',
             'wl.statsLine': 'Слов в списке: {n}',
-            'wl.suggestPinyin': 'Обновить пиньинь на \u00AB{pinyin}\u00BB?',
-            'wl.suggestNormalize': 'Нормализовать до \u00AB{pinyin}\u00BB?'
+            'wl.suggestPinyin': 'Обновить пиньинь на \\u00AB{pinyin}\\u00BB?',
+            'wl.suggestNormalize': 'Нормализовать до \\u00AB{pinyin}\\u00BB?'
         }
     };
 

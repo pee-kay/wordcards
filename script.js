@@ -92,6 +92,9 @@ const wsAnswer = document.getElementById('wsAnswer');
 const wsSubmitBtn = document.getElementById('wsSubmit');
 const wsFeedback = document.getElementById('wsFeedback');
 const wsNextBtn = document.getElementById('wsNext');
+const wsMorphemeOnly = document.getElementById('wsMorphemeOnly');
+const wsHanziQuizPanel = document.getElementById('wsHanziQuizPanel');
+const wsHanziTarget = document.getElementById('wsHanziTarget');
 
 // Handwriting input elements
 const hwToggleBtn = document.getElementById('wsHandwriteToggle');
@@ -139,6 +142,12 @@ function init() {
     if (wpNextBtn) wpNextBtn.addEventListener('click', nextPronunciationQuestion);
     if (wsSubmitBtn) wsSubmitBtn.addEventListener('click', checkSpellingAnswer);
     if (wsNextBtn) wsNextBtn.addEventListener('click', nextSpellingQuestion);
+    if (wsMorphemeOnly) {
+        wsMorphemeOnly.addEventListener('change', function () {
+            updateWritingModeUI();
+            if (currentMode === 'writing') nextSpellingQuestion();
+        });
+    }
 
     if (hwToggleBtn) hwToggleBtn.addEventListener('click', toggleHandwritePanel);
     if (hwUndoBtn) hwUndoBtn.addEventListener('click', function () { if (_hwBoard) _hwBoard.undo(); });
@@ -178,6 +187,7 @@ function init() {
 
     // Set initial mode
     setMode('editor');
+    updateWritingModeUI();
 
     if (randomizeCheckbox) {
         isRandomized = randomizeCheckbox.checked;
@@ -381,6 +391,9 @@ function handleFileImport(event) {
 // Set the current learning mode
 function setMode(mode) {
     cancelAutoAdvance();
+    if (mode !== 'writing') {
+        clearHanziWriterQuiz();
+    }
     if (currentMode === 'editor' && mode !== 'editor') {
         if (!applyEditorToCards()) {
             return;
@@ -804,9 +817,78 @@ function checkPronunciationAnswer() {
 
 // Writing/spelling functions
 let currentWSQuestion = null;
+let _wsHanziWriter = null;
+let _wsHanziQuizToken = 0;
+const WS_HAN_RE = /[\u4e00-\u9fff\u3400-\u4dbf\uf900-\ufaff]/;
+
+function isSingleHanziCard(card) {
+    const w = String(card && card.word ? card.word : '').trim();
+    if (!w) return false;
+    if (Array.from(w).length !== 1) return false;
+    return WS_HAN_RE.test(w);
+}
+
+function getWritingQuestionPool() {
+    if (wsMorphemeOnly && wsMorphemeOnly.checked) {
+        return cards.filter(isSingleHanziCard);
+    }
+    return cards;
+}
+
+function clearHanziWriterQuiz() {
+    _wsHanziQuizToken++;
+    _wsHanziWriter = null;
+    if (wsHanziTarget) wsHanziTarget.innerHTML = '';
+}
+
+function updateWritingModeUI() {
+    const morphemeMode = !!(wsMorphemeOnly && wsMorphemeOnly.checked);
+    if (wsAnswer) wsAnswer.classList.toggle('hidden', morphemeMode);
+    if (wsSubmitBtn) wsSubmitBtn.classList.toggle('hidden', morphemeMode);
+    if (hwToggleBtn) hwToggleBtn.classList.toggle('hidden', morphemeMode);
+    if (hwPanel) hwPanel.classList.add('hidden');
+    if (hwToggleBtn) hwToggleBtn.classList.remove('active');
+    if (wsHanziQuizPanel) wsHanziQuizPanel.classList.toggle('hidden', !morphemeMode);
+    if (!morphemeMode) clearHanziWriterQuiz();
+}
+
+function startHanziWriterQuiz(character, onDone) {
+    clearHanziWriterQuiz();
+    if (!wsHanziTarget) return false;
+    if (!window.HanziWriter || typeof HanziWriter.create !== 'function') {
+        wsFeedback.textContent = t('ws.hwUnavailable');
+        wsFeedback.className = 'feedback incorrect';
+        return false;
+    }
+    const token = _wsHanziQuizToken;
+    try {
+        _wsHanziWriter = HanziWriter.create(wsHanziTarget, character, {
+            width: 220,
+            height: 220,
+            padding: 6,
+            showOutline: false,
+            showCharacter: false,
+            strokeAnimationSpeed: 1,
+            delayBetweenStrokes: 80
+        });
+        _wsHanziWriter.quiz({
+            showHintAfterMisses: 3,
+            onComplete: function () {
+                if (token !== _wsHanziQuizToken) return;
+                if (onDone) onDone();
+            }
+        });
+        return true;
+    } catch (_) {
+        wsFeedback.textContent = t('ws.hwUnavailable');
+        wsFeedback.className = 'feedback incorrect';
+        return false;
+    }
+}
 
 function initWriting() {
     if (cards.length === 0) return;
+    updateWritingModeUI();
     nextSpellingQuestion();
 }
 
@@ -816,20 +898,31 @@ function nextSpellingQuestion() {
         showEmptyState('writing');
         return;
     }
-    
+    const morphemeMode = !!(wsMorphemeOnly && wsMorphemeOnly.checked);
+    updateWritingModeUI();
+
     // Clear previous feedback and input
     wsFeedback.textContent = '';
     wsFeedback.className = 'feedback';
-    wsAnswer.value = '';
-    
+    if (wsAnswer) wsAnswer.value = '';
+
+    const pool = getWritingQuestionPool();
+    if (pool.length === 0) {
+        wsQuestion.textContent = t('ws.qNoMorpheme');
+        wsFeedback.textContent = t('ws.noMorphemeCards');
+        wsFeedback.className = 'feedback incorrect';
+        clearHanziWriterQuiz();
+        return;
+    }
+
     // Randomly select a question type
     const questionTypes = ['meaning', 'pronunciation'];
     const questionType = questionTypes[Math.floor(Math.random() * questionTypes.length)];
-    
+
     // Select a random card
-    const randomIndex = Math.floor(Math.random() * cards.length);
-    const card = cards[randomIndex];
-    
+    const randomIndex = Math.floor(Math.random() * pool.length);
+    const card = pool[randomIndex];
+
     // Create question
     if (questionType === 'meaning') {
         wsQuestion.textContent = t('ws.qMeaning', { meaning: card.meaning });
@@ -839,13 +932,25 @@ function nextSpellingQuestion() {
     
     currentWSQuestion = { 
         correctSpelling: card.word,
-        questionType: questionType
+        questionType: questionType,
+        morphemeMode: morphemeMode
     };
-    if (wsAnswer) wsAnswer.focus();
+
+    if (morphemeMode) {
+        startHanziWriterQuiz(card.word, function () {
+            wsFeedback.textContent = t('ws.correct');
+            wsFeedback.className = 'feedback correct';
+            startAutoAdvance(wsNextBtn, nextSpellingQuestion, 2);
+            if (wsNextBtn) wsNextBtn.focus();
+        });
+    } else if (wsAnswer) {
+        wsAnswer.focus();
+    }
 }
 
 function checkSpellingAnswer() {
     if (!currentWSQuestion) return;
+    if (currentWSQuestion.morphemeMode) return;
     
     const userAnswer = wsAnswer.value.trim();
     const correctAnswer = currentWSQuestion.correctSpelling;

@@ -370,6 +370,19 @@ input[type="text"] {
     max-width: 100%;
 }
 
+.ws-mode-wrap {
+    margin-bottom: 10px;
+}
+
+.ws-hanzi-target {
+    width: 220px;
+    height: 220px;
+    margin: 0 auto;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    background: #fff;
+}
+
 #hwCanvas {
     border: 1px solid #ccc;
     border-radius: 4px;
