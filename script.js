@@ -92,9 +92,11 @@ const wsAnswer = document.getElementById('wsAnswer');
 const wsSubmitBtn = document.getElementById('wsSubmit');
 const wsFeedback = document.getElementById('wsFeedback');
 const wsNextBtn = document.getElementById('wsNext');
-const wsMorphemeOnly = document.getElementById('wsMorphemeOnly');
+const wsUseHanziQuiz = document.getElementById('wsUseHanziQuiz');
 const wsHanziQuizPanel = document.getElementById('wsHanziQuizPanel');
 const wsHanziTarget = document.getElementById('wsHanziTarget');
+const wsHanziDone = document.getElementById('wsHanziDone');
+const wsHanziHint = document.getElementById('wsHanziHint');
 
 // Handwriting input elements
 const hwToggleBtn = document.getElementById('wsHandwriteToggle');
@@ -142,10 +144,33 @@ function init() {
     if (wpNextBtn) wpNextBtn.addEventListener('click', nextPronunciationQuestion);
     if (wsSubmitBtn) wsSubmitBtn.addEventListener('click', checkSpellingAnswer);
     if (wsNextBtn) wsNextBtn.addEventListener('click', nextSpellingQuestion);
-    if (wsMorphemeOnly) {
-        wsMorphemeOnly.addEventListener('change', function () {
+    if (wsUseHanziQuiz) {
+        wsUseHanziQuiz.addEventListener('change', function () {
             updateWritingModeUI();
-            if (currentMode === 'writing') nextSpellingQuestion();
+            if (currentMode !== 'writing' || !currentWSQuestion) return;
+            currentWSQuestion.hanziQuizMode = !!wsUseHanziQuiz.checked;
+            cancelAutoAdvance();
+            wsFeedback.textContent = '';
+            wsFeedback.className = 'feedback';
+            if (wsUseHanziQuiz.checked) {
+                _wsHanziChars = getHanziCharsFromWord(currentWSQuestion.correctSpelling);
+                _wsHanziCharIndex = 0;
+                if (wsHanziDone) wsHanziDone.innerHTML = '';
+                if (_wsHanziChars.length === 0) {
+                    wsFeedback.textContent = t('ws.noHanziInWord');
+                    wsFeedback.className = 'feedback incorrect';
+                    return;
+                }
+                runCurrentHanziStep(function () {
+                    wsFeedback.textContent = t('ws.correct');
+                    wsFeedback.className = 'feedback correct';
+                    startAutoAdvance(wsNextBtn, nextSpellingQuestion, 2);
+                    if (wsNextBtn) wsNextBtn.focus();
+                });
+            } else {
+                clearHanziWriterQuiz();
+                if (wsAnswer) wsAnswer.focus();
+            }
         });
     }
 
@@ -819,48 +844,168 @@ function checkPronunciationAnswer() {
 let currentWSQuestion = null;
 let _wsHanziWriter = null;
 let _wsHanziQuizToken = 0;
+let _wsHanziChars = [];
+let _wsHanziCharIndex = 0;
+let _wsHanziMistakes = 0;
+let _wsHanziOutlineShown = false;
+let _wsHanziStrokeTotal = 0;
 const WS_HAN_RE = /[\u4e00-\u9fff\u3400-\u4dbf\uf900-\ufaff]/;
+const WS_HINT_STROKE_LABEL_THRESHOLD = 5;
+const WS_HINT_OUTLINE_THRESHOLD = 10;
 
-function isSingleHanziCard(card) {
-    const w = String(card && card.word ? card.word : '').trim();
-    if (!w) return false;
-    if (Array.from(w).length !== 1) return false;
-    return WS_HAN_RE.test(w);
-}
-
-function getWritingQuestionPool() {
-    if (wsMorphemeOnly && wsMorphemeOnly.checked) {
-        return cards.filter(isSingleHanziCard);
-    }
-    return cards;
+function getHanziCharsFromWord(word) {
+    return Array.from(String(word || '').trim()).filter(function (ch) {
+        return WS_HAN_RE.test(ch);
+    });
 }
 
 function clearHanziWriterQuiz() {
     _wsHanziQuizToken++;
     _wsHanziWriter = null;
+    _wsHanziChars = [];
+    _wsHanziCharIndex = 0;
+    _wsHanziMistakes = 0;
+    _wsHanziOutlineShown = false;
+    _wsHanziStrokeTotal = 0;
     if (wsHanziTarget) wsHanziTarget.innerHTML = '';
+    if (wsHanziDone) wsHanziDone.innerHTML = '';
+    if (wsHanziHint) {
+        wsHanziHint.textContent = '';
+        wsHanziHint.classList.add('hidden');
+    }
 }
 
 function updateWritingModeUI() {
-    const morphemeMode = !!(wsMorphemeOnly && wsMorphemeOnly.checked);
-    if (wsAnswer) wsAnswer.classList.toggle('hidden', morphemeMode);
-    if (wsSubmitBtn) wsSubmitBtn.classList.toggle('hidden', morphemeMode);
-    if (hwToggleBtn) hwToggleBtn.classList.toggle('hidden', morphemeMode);
+    const hanziQuizMode = !!(wsUseHanziQuiz && wsUseHanziQuiz.checked);
+    if (wsAnswer) wsAnswer.classList.toggle('hidden', hanziQuizMode);
+    if (wsSubmitBtn) wsSubmitBtn.classList.toggle('hidden', hanziQuizMode);
+    if (hwToggleBtn) hwToggleBtn.classList.toggle('hidden', hanziQuizMode);
     if (hwPanel) hwPanel.classList.add('hidden');
     if (hwToggleBtn) hwToggleBtn.classList.remove('active');
-    if (wsHanziQuizPanel) wsHanziQuizPanel.classList.toggle('hidden', !morphemeMode);
-    if (!morphemeMode) clearHanziWriterQuiz();
+    if (wsHanziQuizPanel) wsHanziQuizPanel.classList.toggle('hidden', !hanziQuizMode);
+    if (!hanziQuizMode && wsHanziHint) {
+        wsHanziHint.textContent = '';
+        wsHanziHint.classList.add('hidden');
+    }
 }
 
-function startHanziWriterQuiz(character, onDone) {
-    clearHanziWriterQuiz();
+function renderCompletedHanziChar(ch) {
+    if (!wsHanziDone || !window.HanziWriter || typeof HanziWriter.create !== 'function') return;
+    var prevItems = Array.prototype.slice.call(wsHanziDone.querySelectorAll('.ws-hanzi-done-item'));
+    var firstRects = prevItems.map(function (el) {
+        return el.getBoundingClientRect();
+    });
+
+    var slot = document.createElement('div');
+    slot.className = 'ws-hanzi-done-item ws-hanzi-done-item--enter';
+    wsHanziDone.appendChild(slot);
+    try {
+        var w = HanziWriter.create(slot, ch, {
+            width: 220,
+            height: 220,
+            padding: 2,
+            showOutline: false,
+            showCharacter: true
+        });
+        if (w && typeof w.showCharacter === 'function') {
+            w.showCharacter({ duration: 180 });
+        }
+    } catch (_) {
+        slot.textContent = ch;
+    }
+
+    var reduceMotion =
+        typeof window.matchMedia === 'function' &&
+        window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (reduceMotion || !prevItems.length) return;
+
+    var durationMs = 260;
+    var ease = 'cubic-bezier(0.33, 0, 0.2, 1)';
+
+    function clearSlideShift(el) {
+        el.style.transition = '';
+        el.style.transform = '';
+    }
+
+    requestAnimationFrame(function () {
+        requestAnimationFrame(function () {
+            prevItems.forEach(function (el, i) {
+                var a = firstRects[i];
+                var b = el.getBoundingClientRect();
+                var dx = a.left - b.left;
+                if (Math.abs(dx) < 0.5) return;
+                el.style.transition = 'none';
+                el.style.transform = 'translateX(' + dx + 'px)';
+            });
+            void wsHanziDone.offsetHeight;
+            requestAnimationFrame(function () {
+                prevItems.forEach(function (el) {
+                    if (!el.style.transform) return;
+                    el.style.transition = 'transform ' + durationMs + 'ms ' + ease;
+                    el.style.transform = 'translateX(0)';
+                });
+                window.setTimeout(function () {
+                    prevItems.forEach(clearSlideShift);
+                }, durationMs + 50);
+            });
+        });
+    });
+}
+
+function showHanziStrokeHint(strokeNum) {
+    if (!wsHanziHint) return;
+    var cur = strokeNum > 0 ? strokeNum : '?';
+    var total = _wsHanziStrokeTotal > 0 ? _wsHanziStrokeTotal : '?';
+    wsHanziHint.textContent = t('ws.hwStrokeHint', { cur: cur, total: total });
+    wsHanziHint.classList.remove('hidden');
+}
+
+function hideHanziStrokeHint() {
+    if (!wsHanziHint) return;
+    wsHanziHint.textContent = '';
+    wsHanziHint.classList.add('hidden');
+}
+
+function loadStrokeTotalForCurrentChar(ch) {
+    _wsHanziStrokeTotal = 0;
+    if (!window.HanziWriter || typeof HanziWriter.loadCharacterData !== 'function') return;
+    HanziWriter.loadCharacterData(ch).then(function (data) {
+        var strokes = data && data.strokes;
+        if (Array.isArray(strokes)) _wsHanziStrokeTotal = strokes.length;
+    }).catch(function () {});
+}
+
+function runCurrentHanziStep(onWordDone) {
+    if (_wsHanziCharIndex >= _wsHanziChars.length) {
+        onWordDone();
+        return;
+    }
+    var ch = _wsHanziChars[_wsHanziCharIndex];
+    loadStrokeTotalForCurrentChar(ch);
+    startHanziWriterCharQuiz(function () {
+        if (_wsHanziCharIndex < _wsHanziChars.length - 1) {
+            renderCompletedHanziChar(ch);
+        }
+        _wsHanziCharIndex++;
+        runCurrentHanziStep(onWordDone);
+    });
+}
+
+function startHanziWriterCharQuiz(onDone) {
     if (!wsHanziTarget) return false;
     if (!window.HanziWriter || typeof HanziWriter.create !== 'function') {
         wsFeedback.textContent = t('ws.hwUnavailable');
         wsFeedback.className = 'feedback incorrect';
         return false;
     }
+    if (!_wsHanziChars.length || _wsHanziCharIndex < 0 || _wsHanziCharIndex >= _wsHanziChars.length) return false;
+    _wsHanziQuizToken++;
     const token = _wsHanziQuizToken;
+    _wsHanziMistakes = 0;
+    _wsHanziOutlineShown = false;
+    wsHanziTarget.innerHTML = '';
+    hideHanziStrokeHint();
+    var character = _wsHanziChars[_wsHanziCharIndex];
     try {
         _wsHanziWriter = HanziWriter.create(wsHanziTarget, character, {
             width: 220,
@@ -872,9 +1017,34 @@ function startHanziWriterQuiz(character, onDone) {
             delayBetweenStrokes: 80
         });
         _wsHanziWriter.quiz({
-            showHintAfterMisses: 3,
+            showHintAfterMisses: 1,
+            highlightOnComplete: true,
+            onCorrectStroke: function (info) {
+                if (token !== _wsHanziQuizToken) return;
+                if (_wsHanziMistakes >= WS_HINT_STROKE_LABEL_THRESHOLD) {
+                    var strokeNum = 0;
+                    if (info && typeof info.strokeNum === 'number') strokeNum = info.strokeNum + 1;
+                    showHanziStrokeHint(strokeNum);
+                }
+            },
+            onMistake: function (info) {
+                if (token !== _wsHanziQuizToken) return;
+                _wsHanziMistakes++;
+                if (_wsHanziMistakes === WS_HINT_STROKE_LABEL_THRESHOLD) {
+                    var strokeNum = 0;
+                    if (info && typeof info.strokeNum === 'number') strokeNum = info.strokeNum + 1;
+                    showHanziStrokeHint(strokeNum);
+                }
+                if (!_wsHanziOutlineShown && _wsHanziMistakes >= WS_HINT_OUTLINE_THRESHOLD) {
+                    _wsHanziOutlineShown = true;
+                    if (_wsHanziWriter && typeof _wsHanziWriter.showOutline === 'function') {
+                        _wsHanziWriter.showOutline();
+                    }
+                }
+            },
             onComplete: function () {
                 if (token !== _wsHanziQuizToken) return;
+                hideHanziStrokeHint();
                 if (onDone) onDone();
             }
         });
@@ -898,20 +1068,20 @@ function nextSpellingQuestion() {
         showEmptyState('writing');
         return;
     }
-    const morphemeMode = !!(wsMorphemeOnly && wsMorphemeOnly.checked);
+    const hanziQuizMode = !!(wsUseHanziQuiz && wsUseHanziQuiz.checked);
     updateWritingModeUI();
+    clearHanziWriterQuiz();
 
     // Clear previous feedback and input
     wsFeedback.textContent = '';
     wsFeedback.className = 'feedback';
     if (wsAnswer) wsAnswer.value = '';
 
-    const pool = getWritingQuestionPool();
+    const pool = cards;
     if (pool.length === 0) {
-        wsQuestion.textContent = t('ws.qNoMorpheme');
-        wsFeedback.textContent = t('ws.noMorphemeCards');
+        wsQuestion.textContent = t('empty.title');
+        wsFeedback.textContent = t('empty.text');
         wsFeedback.className = 'feedback incorrect';
-        clearHanziWriterQuiz();
         return;
     }
 
@@ -933,16 +1103,24 @@ function nextSpellingQuestion() {
     currentWSQuestion = { 
         correctSpelling: card.word,
         questionType: questionType,
-        morphemeMode: morphemeMode
+        hanziQuizMode: hanziQuizMode
     };
 
-    if (morphemeMode) {
-        startHanziWriterQuiz(card.word, function () {
-            wsFeedback.textContent = t('ws.correct');
-            wsFeedback.className = 'feedback correct';
-            startAutoAdvance(wsNextBtn, nextSpellingQuestion, 2);
-            if (wsNextBtn) wsNextBtn.focus();
-        });
+    if (hanziQuizMode) {
+        _wsHanziChars = getHanziCharsFromWord(card.word);
+        _wsHanziCharIndex = 0;
+        if (wsHanziDone) wsHanziDone.innerHTML = '';
+        if (_wsHanziChars.length === 0) {
+            wsFeedback.textContent = t('ws.noHanziInWord');
+            wsFeedback.className = 'feedback incorrect';
+        } else {
+            runCurrentHanziStep(function () {
+                wsFeedback.textContent = t('ws.correct');
+                wsFeedback.className = 'feedback correct';
+                startAutoAdvance(wsNextBtn, nextSpellingQuestion, 2);
+                if (wsNextBtn) wsNextBtn.focus();
+            });
+        }
     } else if (wsAnswer) {
         wsAnswer.focus();
     }
@@ -950,7 +1128,7 @@ function nextSpellingQuestion() {
 
 function checkSpellingAnswer() {
     if (!currentWSQuestion) return;
-    if (currentWSQuestion.morphemeMode) return;
+    if (currentWSQuestion.hanziQuizMode) return;
     
     const userAnswer = wsAnswer.value.trim();
     const correctAnswer = currentWSQuestion.correctSpelling;

@@ -370,6 +370,11 @@ input[type="text"] {
     max-width: 100%;
 }
 
+#wsHanziQuizPanel {
+    position: relative;
+    overflow: hidden;
+}
+
 .ws-mode-wrap {
     margin-bottom: 10px;
 }
@@ -381,6 +386,83 @@ input[type="text"] {
     border: 1px solid #ddd;
     border-radius: 8px;
     background: #fff;
+}
+
+.ws-hanzi-row {
+    position: relative;
+    height: 220px;
+    width: 100%;
+    min-width: 220px;
+}
+
+.ws-hanzi-done {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    right: calc(50% + 116px);
+    display: flex;
+    flex-wrap: nowrap;
+    gap: 6px;
+    justify-content: flex-end;
+    align-content: flex-start;
+    min-height: 220px;
+    overflow: visible;
+    z-index: 1;
+    /* Fade completed tiles by alpha at the left edge (overlay gradients end transparent
+       and would show strokes at full opacity again next to the fade band). */
+    -webkit-mask-image: linear-gradient(
+        to right,
+        rgba(0, 0, 0, 0) 0%,
+        rgba(0, 0, 0, 1) 88px,
+        rgba(0, 0, 0, 1) 100%
+    );
+    mask-image: linear-gradient(
+        to right,
+        rgba(0, 0, 0, 0) 0%,
+        rgba(0, 0, 0, 1) 88px,
+        rgba(0, 0, 0, 1) 100%
+    );
+    -webkit-mask-size: 100% 100%;
+    mask-size: 100% 100%;
+    -webkit-mask-repeat: no-repeat;
+    mask-repeat: no-repeat;
+}
+
+.ws-hanzi-done-item {
+    width: 220px;
+    height: 220px;
+    border: 1px solid #ddd;
+    border-radius: 6px;
+    background: #fff;
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 auto;
+}
+
+.ws-hanzi-target {
+    position: absolute;
+    top: 0;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 2;
+}
+
+.ws-hanzi-done-item--enter {
+    animation: ws-slide-in 220ms ease-out;
+}
+
+@keyframes ws-slide-in {
+    from { opacity: 0; transform: translateX(-8px) scale(0.96); }
+    to { opacity: 1; transform: translateX(0) scale(1); }
+}
+
+.ws-hanzi-hint {
+    text-align: center;
+    color: #7f8c8d;
+    font-size: 0.92em;
 }
 
 #hwCanvas {
