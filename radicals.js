@@ -225,8 +225,6 @@
         }
         addLine(0, 50, 100, 50);
         addLine(50, 0, 50, 100);
-        addLine(0, 0, 100, 100);
-        addLine(100, 0, 0, 100);
         host.insertBefore(svg, host.firstChild);
     }
 
