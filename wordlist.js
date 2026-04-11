@@ -824,12 +824,18 @@
     }
 
     function parseCsvToFieldRows(text) {
-        var lines = String(text || '').split(/\r?\n/);
+        var raw = String(text || '');
+        var lineRows;
+        if (window.WordcardsCsvWordlists && WordcardsCsvWordlists.splitCsvIntoRows) {
+            lineRows = WordcardsCsvWordlists.splitCsvIntoRows(raw);
+        } else {
+            lineRows = raw.split(/\r?\n/).filter(function (ln) {
+                return ln.replace(/^\s+|\s+$/g, '').length > 0;
+            });
+        }
         var rows = [];
-        for (var i = 0; i < lines.length; i++) {
-            var line = lines[i].trim();
-            if (!line) continue;
-            rows.push(parseCsvLine(line));
+        for (var i = 0; i < lineRows.length; i++) {
+            rows.push(parseCsvLine(lineRows[i]));
         }
         return rows;
     }
@@ -846,8 +852,27 @@
         return true;
     }
 
+    /** Miro export: one CSV row like "…long Russian/Chinese blob…","" — not strict word,pinyin,meaning. */
+    function rowLooksLikeMiroExportBlob(fields) {
+        if (!fields || fields.length < 1) return false;
+        var w = (fields[0] || '').trim();
+        if (!w || !WL_HAN_REGEX.test(w)) return false;
+        if (rowLooksLikeStrictVocabRow(fields)) return false;
+        if (w.length > 96) return true;
+        if (fields.length >= 2 && w.length > 48) {
+            for (var r = 1; r < fields.length; r++) {
+                if ((fields[r] || '').trim()) return false;
+            }
+            return true;
+        }
+        return false;
+    }
+
     function shouldUseMiroCsvExtractor(fieldRows, rawText) {
         if (!fieldRows.length || !WL_HAN_REGEX.test(rawText)) return false;
+        for (var bi = 0; bi < fieldRows.length; bi++) {
+            if (rowLooksLikeMiroExportBlob(fieldRows[bi])) return true;
+        }
         var strict = 0;
         var hanLines = 0;
         var singleField = 0;

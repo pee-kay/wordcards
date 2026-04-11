@@ -22,6 +22,52 @@
         'wordList.presetUnavailable': '(list unavailable)'
     };
 
+    /**
+     * Split raw CSV text into row strings at unquoted newlines only.
+     * Needed when a quoted field contains line breaks (RFC 4180).
+     */
+    function splitCsvIntoRows(text) {
+        var s = String(text || '').replace(/^\uFEFF/g, '');
+        var rows = [];
+        var start = 0;
+        var inQuotes = false;
+        var i = 0;
+        while (i < s.length) {
+            var c = s[i];
+            if (inQuotes) {
+                if (c === '"') {
+                    if (s[i + 1] === '"') {
+                        i += 2;
+                    } else {
+                        inQuotes = false;
+                        i++;
+                    }
+                } else {
+                    i++;
+                }
+            } else {
+                if (c === '"') {
+                    inQuotes = true;
+                    i++;
+                } else if (c === '\r' && s[i + 1] === '\n') {
+                    rows.push(s.slice(start, i));
+                    i += 2;
+                    start = i;
+                } else if (c === '\n' || c === '\r') {
+                    rows.push(s.slice(start, i));
+                    i++;
+                    start = i;
+                } else {
+                    i++;
+                }
+            }
+        }
+        rows.push(s.slice(start));
+        return rows.filter(function (row) {
+            return row.replace(/^\s+|\s+$/g, '').length > 0;
+        });
+    }
+
     /** Split one CSV row; supports quoted fields and doubled quotes (RFC 4180-style). */
     function parseCsvLine(line) {
         const fields = [];
@@ -265,6 +311,7 @@
 
     global.WordcardsCsvWordlists = {
         parseCsvLine: parseCsvLine,
+        splitCsvIntoRows: splitCsvIntoRows,
         initCsvPresetSelect: initCsvPresetSelect,
         initWordListToggle: initWordListToggle,
         getExportFilename: getExportFilename
